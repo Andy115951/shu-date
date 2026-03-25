@@ -89,22 +89,22 @@ app.post('/login', async (req, res) => {
   }
 
   // 发送登录邮件
-  const loginUrl = `${process.env.BASE_URL}/login/verify/${loginCode}`;
-  const { sendLoginEmail, isMailConfigured } = require('./mailer');
+  const { sendLoginEmail } = require('./mailer');
 
-  await sendLoginEmail(email, loginCode);
+  const result = await sendLoginEmail(email, loginCode);
 
-  if (isMailConfigured()) {
+  if (result.success) {
     res.render('login', {
       title: '登录',
       message: '验证码已发送到你的邮箱，点击邮件中的链接即可登录',
       messageType: 'success'
     });
   } else {
+    // 邮件发送失败时显示验证码（开发/测试模式）
     res.render('login', {
       title: '登录',
-      message: '登录验证码（开发模式）: ' + loginCode + ' | ' + loginUrl,
-      messageType: 'success'
+      message: '邮件发送失败，请使用以下链接登录（测试模式）:<br>' + result.url,
+      messageType: 'error'
     });
   }
 });

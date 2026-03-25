@@ -18,10 +18,17 @@ function getTransporter() {
     return null;
   }
 
+  const port = parseInt(process.env.SMTP_PORT) || 587;
+  const isSSL = port === 465;
+
   transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
-    port: parseInt(process.env.SMTP_PORT) || 587,
-    secure: false,
+    port: port,
+    secure: isSSL,
+    connectionTimeout: 10000,
+    tls: {
+      rejectUnauthorized: false
+    },
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS
@@ -42,32 +49,38 @@ async function sendLoginEmail(email, loginCode) {
 
   if (!t) {
     console.log('邮件模拟模式: 登录验证码', loginCode);
-    return true;
+    return { success: true, code: loginCode, url: loginUrl };
   }
 
-  await t.sendMail({
-    from: process.env.FROM_EMAIL || process.env.SMTP_USER,
-    to: email,
-    subject: '【心有所SHU】登录验证码',
-    html: `
-      <div style="font-family: 'Microsoft YaHei', sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-        <h2 style="color: #e74c3c;">🎓 登录心有所SHU</h2>
-        <p>同学你好！</p>
-        <p>点击以下链接直接登录：</p>
-        <p style="margin: 20px 0;">
-          <a href="${loginUrl}" style="background: #e74c3c; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px;">立即登录</a>
-        </p>
-        <p>或复制以下链接到浏览器打开：</p>
-        <p style="word-break: break-all; color: #666;">${loginUrl}</p>
-        <p style="color: #999; font-size: 12px; margin-top: 30px;">
-          链接有效期为10分钟。如非本人操作，请忽略此邮件。
-        </p>
-      </div>
-    `
-  });
+  try {
+    await t.sendMail({
+      from: process.env.FROM_EMAIL || process.env.SMTP_USER,
+      to: email,
+      subject: '【心有所SHU】登录验证码',
+      html: `
+        <div style="font-family: 'Microsoft YaHei', sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <h2 style="color: #e74c3c;">🎓 登录心有所SHU</h2>
+          <p>同学你好！</p>
+          <p>点击以下链接直接登录：</p>
+          <p style="margin: 20px 0;">
+            <a href="${loginUrl}" style="background: #e74c3c; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px;">立即登录</a>
+          </p>
+          <p>或复制以下链接到浏览器打开：</p>
+          <p style="word-break: break-all; color: #666;">${loginUrl}</p>
+          <p style="color: #999; font-size: 12px; margin-top: 30px;">
+            链接有效期为10分钟。如非本人操作，请忽略此邮件。
+          </p>
+        </div>
+      `
+    });
 
-  console.log(`✅ 登录邮件已发送至 ${email}`);
-  return true;
+    console.log(`✅ 登录邮件已发送至 ${email}`);
+    return { success: true };
+  } catch (error) {
+    console.error('❌ 发送邮件失败:', error.message);
+    // 返回验证码用于开发/测试
+    return { success: false, code: loginCode, url: loginUrl, error: error.message };
+  }
 }
 
 // 发送匹配结果邮件
