@@ -1,0 +1,12 @@
+<div class="card" style="max-width: 500px; margin: 0 auto;">
+  <h2>🔐 登录</h2>
+  <p style="color: #666; margin-bottom: 20px;">输入你的学校邮箱，系统会发送登录链接到你的邮箱</p>
+  <form action="/login" method="POST">
+    <div class="form-group">
+      <label for="email">学校邮箱</label>
+      <input type="email" id="email" name="email" placeholder="yourname@shu.edu.cn" required>
+      <p class="hint">请使用 @shu.edu.cn 结尾的学校邮箱</p>
+    </div>
+    <button type="submit" class="btn">发送登录链接</button>
+  </form>
+</div>
