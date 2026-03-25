@@ -22,7 +22,7 @@
 
 ## 🔐 登录方式
 
-1. 打开 https://xin-yousuo-shu.onrender.com/login
+1. 打开 https://shu-date.onrender.com/login
 2. 输入 @shu.edu.cn 邮箱
 3. 点击发送登录链接
 4. 邮箱中点击链接直接登录
