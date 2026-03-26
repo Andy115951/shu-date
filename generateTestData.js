@@ -6,8 +6,48 @@
 require('dotenv').config();
 const db = require('./database');
 
+const PROFILE_FIELD_WHITELIST = [
+  'gender',
+  'preferred_gender',
+  'purpose',
+  'my_grade',
+  'preferred_grade',
+  'campus',
+  'cross_campus',
+  'height',
+  'preferred_height',
+  'hometown',
+  'preferred_hometown',
+  'core_traits',
+  'long_distance',
+  'communication',
+  'spending',
+  'cohabitation',
+  'marriage_plan',
+  'relationship_style',
+  'sleep_schedule',
+  'smoke_alcohol',
+  'pet',
+  'social_public',
+  'social_boundary',
+  'interests'
+];
+
+function assertSingleWrite(result, context) {
+  if (!result || result.changes !== 1) {
+    throw new Error(`${context}失败`);
+  }
+}
+
 function getProfileFields(user) {
-  return Object.keys(user).filter(key => key !== 'email' && key !== 'name');
+  const rawFields = Object.keys(user).filter(key => key !== 'email' && key !== 'name');
+  const invalidFields = rawFields.filter(field => !PROFILE_FIELD_WHITELIST.includes(field));
+
+  if (invalidFields.length > 0) {
+    throw new Error(`测试数据包含未知字段: ${invalidFields.join(', ')}`);
+  }
+
+  return rawFields;
 }
 
 function buildProfileUpsertSql(profileFields) {
@@ -16,13 +56,15 @@ function buildProfileUpsertSql(profileFields) {
   const updateClauses = profileFields
     .map(field => `${field} = EXCLUDED.${field}`)
     .join(', ');
+  const updateSql = updateClauses
+    ? `${updateClauses}, updated_at = NOW()`
+    : 'updated_at = NOW()';
 
   return `
     INSERT INTO profiles (${columns.join(', ')})
     VALUES (${placeholders})
     ON CONFLICT (user_id) DO UPDATE SET
-      ${updateClauses},
-      updated_at = NOW()
+      ${updateSql}
   `;
 }
 
@@ -30,10 +72,11 @@ async function upsertUser(user) {
   const existingUser = await db.queryOne('SELECT id FROM users WHERE email = $1', [user.email]);
 
   if (existingUser) {
-    await db.execute(
+    const updateResult = await db.execute(
       'UPDATE users SET name = $1, verified = 1, login_code = NULL, login_code_expire = NULL WHERE id = $2',
       [user.name, existingUser.id]
     );
+    assertSingleWrite(updateResult, `更新用户 ${user.email}`);
     console.log(`更新用户: ${user.email}`);
     return { id: existingUser.id, created: false };
   }
@@ -45,16 +88,25 @@ async function upsertUser(user) {
     [user.email, user.name]
   );
 
+  if (!createdUser || !createdUser.id) {
+    throw new Error(`创建用户 ${user.email} 失败`);
+  }
+
   console.log(`创建用户: ${user.email}`);
   return { id: createdUser.id, created: true };
 }
 
 async function upsertProfile(userId, user) {
   const profileFields = getProfileFields(user);
+
+  if (profileFields.length === 0) {
+    throw new Error(`测试数据 ${user.email} 缺少可写入的问卷字段`);
+  }
+
   const sql = buildProfileUpsertSql(profileFields);
   const params = [userId, ...profileFields.map(field => user[field])];
-
-  await db.execute(sql, params);
+  const result = await db.execute(sql, params);
+  assertSingleWrite(result, `写入问卷 ${user.email}`);
 }
 
 async function generateTestData() {
