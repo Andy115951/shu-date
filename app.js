@@ -204,21 +204,18 @@ app.post('/login', async (req, res) => {
 
 // 验证码登录
 app.get('/login/verify/:code', async (req, res) => {
-  const user = await db.queryOne('SELECT * FROM users WHERE login_code = $1', [req.params.code]);
+  const user = await db.queryOne(`
+    UPDATE users
+    SET login_code = NULL, login_code_expire = NULL
+    WHERE login_code = $1 AND login_code_expire > NOW()
+    RETURNING id
+  `, [req.params.code]);
 
   if (!user) {
+    const expiredToken = await db.queryOne('SELECT id FROM users WHERE login_code = $1', [req.params.code]);
     return res.render('login', {
       title: '登录',
-      message: '验证码无效或已过期',
-      messageType: 'error'
-    });
-  }
-
-  // 使用时间戳比较，避免时区问题
-  if (new Date(user.login_code_expire).getTime() < Date.now()) {
-    return res.render('login', {
-      title: '登录',
-      message: '验证码已过期，请重新获取',
+      message: expiredToken ? '验证码已过期，请重新获取' : '验证码无效或已过期',
       messageType: 'error'
     });
   }
@@ -227,17 +224,6 @@ app.get('/login/verify/:code', async (req, res) => {
     await regenerateSession(req);
     req.session.userId = user.id;
     await saveSession(req);
-
-    const cleanupResult = await db.execute('UPDATE users SET login_code = NULL, login_code_expire = NULL WHERE id = $1', [user.id]);
-    if (!cleanupResult || cleanupResult.changes !== 1) {
-      console.error('清理登录验证码失败: 未更新到用户记录');
-      await destroySession(req);
-      return res.render('login', {
-        title: '登录',
-        message: '登录失败，请重新获取登录链接',
-        messageType: 'error'
-      });
-    }
   } catch (error) {
     console.error('建立登录会话失败:', error);
     try {
