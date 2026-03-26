@@ -15,7 +15,13 @@ app.use(session({
   secret: process.env.SESSION_SECRET || 'xin_yousuo_shu_secret',
   resave: false,
   saveUninitialized: false,
-  cookie: { maxAge: 7 * 24 * 60 * 60 * 1000 }
+  cookie: {
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+    httpOnly: true,
+    secure: false, // Render需要设为true如果用HTTPS
+    sameSite: 'lax'
+  },
+  proxy: true // Render需要
 }));
 
 // 登录中间件
@@ -109,7 +115,10 @@ app.post('/login', async (req, res) => {
 
 // 验证码登录
 app.get('/login/verify/:code', async (req, res) => {
-  const user = await db.queryOne('SELECT * FROM users WHERE login_code = $1', [req.params.code]);
+  console.log('验证链接访问, code:', req.params.code);
+
+  const user = await db.queryOne('SELECT * FROM users WHERE login_code = ?', [req.params.code]);
+  console.log('查询结果:', user);
 
   if (!user) {
     return res.render('login', {
@@ -127,8 +136,12 @@ app.get('/login/verify/:code', async (req, res) => {
     });
   }
 
-  await db.execute('UPDATE users SET login_code = NULL, login_code_expire = NULL WHERE id = $1', [user.id]);
+  console.log('验证成功, userId:', user.id);
+  await db.execute('UPDATE users SET login_code = NULL, login_code_expire = NULL WHERE id = ?', [user.id]);
+
   req.session.userId = user.id;
+  console.log('session已设置, sessionID:', req.sessionID);
+
   res.redirect('/');
 });
 
