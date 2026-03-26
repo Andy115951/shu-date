@@ -1,68 +1,43 @@
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 require('dotenv').config();
 
-console.log('SMTP配置:', {
-  host: process.env.SMTP_HOST,
-  user: process.env.SMTP_USER,
-  pass: process.env.SMTP_PASS ? '已设置' : '未设置',
-  from: process.env.FROM_EMAIL
+console.log('邮件配置:', {
+  provider: 'Resend',
+  from: process.env.FROM_EMAIL,
+  apiKey: process.env.RESEND_API_KEY ? '已设置' : '未设置'
 });
 
-let transporter = null;
+let resend = null;
 
-function getTransporter() {
-  if (transporter) return transporter;
+function getResend() {
+  if (resend) return resend;
 
-  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
-    console.warn('⚠️ 邮件配置未完成，请在 .env 文件中配置 SMTP');
+  if (!process.env.RESEND_API_KEY) {
+    console.warn('⚠️ 邮件配置未完成，请在 .env 文件中配置 RESEND_API_KEY');
     return null;
   }
 
-  const port = parseInt(process.env.SMTP_PORT) || 465;
-
-  transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: port,
-    secure: true,
-    connectionTimeout: 30000,
-    tls: {
-      ciphers: 'SSLv3'
-    },
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS
-    }
-  });
-
-  // 验证连接
-  transporter.verify((error, success) => {
-    if (error) {
-      console.error('SMTP连接验证失败:', error.message);
-    } else {
-      console.log('SMTP连接成功');
-    }
-  });
-
-  return transporter;
+  resend = new Resend(process.env.RESEND_API_KEY);
+  return resend;
 }
 
 function isMailConfigured() {
-  return !!getTransporter();
+  return !!getResend();
 }
 
 // 发送登录验证码邮件
 async function sendLoginEmail(email, loginCode) {
-  const t = getTransporter();
+  const r = getResend();
   const loginUrl = `${process.env.BASE_URL}/login/verify/${loginCode}`;
 
-  if (!t) {
+  if (!r) {
     console.log('邮件模拟模式: 登录验证码', loginCode);
     return { success: true, code: loginCode, url: loginUrl };
   }
 
   try {
-    await t.sendMail({
-      from: process.env.FROM_EMAIL || process.env.SMTP_USER,
+    await r.emails.send({
+      from: process.env.FROM_EMAIL || '心有所SHU <onboarding@resend.dev>',
       to: email,
       subject: '【心有所SHU】登录验证码',
       html: `
@@ -92,15 +67,15 @@ async function sendLoginEmail(email, loginCode) {
 
 // 发送匹配结果邮件
 async function sendMatchEmail(userEmail, userName, matchedName, matchedGrade, matchedMajor) {
-  const t = getTransporter();
-  if (!t) {
+  const r = getResend();
+  if (!r) {
     console.log('邮件模拟模式: 匹配通知');
-    return true;
+    return { success: true };
   }
 
   try {
-    await t.sendMail({
-      from: process.env.FROM_EMAIL || process.env.SMTP_USER,
+    await r.emails.send({
+      from: process.env.FROM_EMAIL || '心有所SHU <onboarding@resend.dev>',
       to: userEmail,
       subject: '【心有所SHU】本周匹配结果出炉啦！',
       html: `
@@ -130,7 +105,7 @@ async function sendMatchEmail(userEmail, userName, matchedName, matchedGrade, ma
 }
 
 module.exports = {
-  getTransporter,
+  getResend,
   isMailConfigured,
   sendLoginEmail,
   sendMatchEmail
