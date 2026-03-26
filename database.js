@@ -1,51 +1,72 @@
 const { Pool } = require('pg');
+const dns = require('dns').promises;
 require('dotenv').config();
 
-// 解析连接字符串并使用6543端口（Pooler）
-function getPoolConfig() {
-  const connectionString = process.env.DATABASE_URL;
+// 强制使用IPv4解析
+dns.setDefaultResultOrder('ipv4');
 
-  // 如果使用5432端口，改为6543（Pooler端口）
-  let adjustedUrl = connectionString;
-  if (connectionString.includes(':5432/')) {
-    adjustedUrl = connectionString.replace(':5432/', ':6543/');
+// 获取数据库配置
+async function getPoolConfig() {
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    throw new Error('DATABASE_URL not set');
   }
 
-  // 提取主机名并强制IPv4
-  const url = new URL(connectionString.replace(':6543/', ':5432/'));
-  const host = url.hostname;
+  // 解析连接字符串
+  const url = new URL(connectionString);
+  let host = url.hostname;
+
+  // 尝试解析为IPv4地址
+  try {
+    const addresses = await dns.resolve4(host);
+    if (addresses && addresses.length > 0) {
+      host = addresses[0];
+      console.log(`Resolved ${url.hostname} to IPv4: ${host}`);
+    }
+  } catch (e) {
+    console.log('DNS resolution failed, using original hostname');
+  }
+
+  // 提取端口（默认5432）
+  const port = parseInt(url.port) || 5432;
 
   return {
     host: host,
-    port: 5432,
-    database: 'postgres',
+    port: port,
+    database: url.pathname.substring(1) || 'postgres',
     user: url.username,
     password: url.password,
     ssl: {
       rejectUnauthorized: false
     },
-    family: 4, // 强制IPv4
+    family: 4,
     max: 10,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 15000
   };
 }
 
-const pool = new Pool(getPoolConfig());
+let pool = null;
 
-// 测试连接
-pool.on('error', (err) => {
-  console.error('Unexpected database pool error:', err.message);
-});
-
-// 同步缓存（模拟同步行为）
-let syncDb = null;
-let syncReady = false;
-const pendingQueries = [];
+// 获取连接池
+async function getPool() {
+  if (!pool) {
+    const config = await getPoolConfig();
+    pool = new Pool(config);
+    console.log('数据库配置:', {
+      host: config.host,
+      port: config.port,
+      database: config.database,
+      user: config.user ? '已设置' : '未设置'
+    });
+  }
+  return pool;
+}
 
 // 初始化数据库表
 async function initDatabase() {
-  const client = await pool.connect();
+  const p = await getPool();
+  const client = await p.connect();
   try {
     // users 表
     await client.query(`
@@ -109,16 +130,6 @@ async function initDatabase() {
       )
     `);
 
-    // 初始化同步缓存
-    syncDb = pool;
-    syncReady = true;
-
-    // 处理积压的查询
-    for (const query of pendingQueries) {
-      query.resolve();
-    }
-    pendingQueries.length = 0;
-
     console.log('✅ Supabase数据库初始化完成');
   } catch (error) {
     console.error('数据库初始化失败:', error.message);
@@ -129,101 +140,75 @@ async function initDatabase() {
 }
 
 // 确保数据库就绪
-function ensureReady() {
-  if (!syncReady) {
-    return new Promise((resolve) => {
-      pendingQueries.push({ resolve });
-    });
-  }
+let ready = false;
+const pendingQueries = [];
+
+async function ensureReady() {
+  if (ready) return;
+  return new Promise((resolve) => {
+    pendingQueries.push({ resolve });
+  });
 }
 
-// SQL辅助函数 - 兼容同步API
-function prepare(sql) {
-  return {
-    run: async function(...params) {
-      await ensureReady();
-      try {
-        const result = await pool.query(sql, params);
-        return { changes: result.rowCount || 0 };
-      } catch (error) {
-        console.error('SQL Error (run):', error.message, sql);
-        return { changes: 0 };
-      }
-    },
-    get: async function(...params) {
-      await ensureReady();
-      try {
-        const result = await pool.query(sql, params);
-        return result.rows[0];
-      } catch (error) {
-        console.error('SQL Error (get):', error.message, sql);
-        return undefined;
-      }
-    },
-    all: async function(...params) {
-      await ensureReady();
-      try {
-        const result = await pool.query(sql, params);
-        return result.rows;
-      } catch (error) {
-        console.error('SQL Error (all):', error.message, sql);
-        return [];
-      }
-    }
-  };
-}
-
-// 同步版本（用于不兼容async的地方，会返回undefined）
-function prepareSync(sql) {
-  return {
-    run: (...params) => {
-      if (!syncReady) return { changes: 0 };
-      pool.query(sql, params).catch(e => console.error('SQL Error:', e.message));
-      return { changes: 1 };
-    },
-    get: (...params) => {
-      if (!syncReady) return undefined;
-      return pool.query(sql, params).then(r => r.rows[0]).catch(() => undefined);
-    },
-    all: (...params) => {
-      if (!syncReady) return [];
-      return pool.query(sql, params).then(r => r.rows).catch(() => []);
-    }
-  };
-}
-
-// 直接查询方法
+// SQL辅助函数
 async function query(sql, params = []) {
   await ensureReady();
-  const result = await pool.query(sql, params);
+  const p = await getPool();
+  const result = await p.query(sql, params);
   return result.rows;
 }
 
 async function queryOne(sql, params = []) {
-  await ensureReady();
-  const result = await pool.query(sql, params);
-  return result.rows[0];
+  const rows = await query(sql, params);
+  return rows[0];
 }
 
 async function execute(sql, params = []) {
   await ensureReady();
-  const result = await pool.query(sql, params);
+  const p = await getPool();
+  const result = await p.query(sql, params);
   return { changes: result.rowCount || 0 };
 }
 
-// 异步初始化包装（兼容旧代码）
+// 兼容旧API（返回带有then的对象）
+function prepare(sql) {
+  const p = getPool();
+  return {
+    run: async function(...params) {
+      const pool = await p;
+      const result = await pool.query(sql, params);
+      return { changes: result.rowCount || 0 };
+    },
+    get: async function(...params) {
+      const pool = await p;
+      const result = await pool.query(sql, params);
+      return result.rows[0];
+    },
+    all: async function(...params) {
+      const pool = await p;
+      const result = await pool.query(sql, params);
+      return result.rows;
+    }
+  };
+}
+
+// 初始化并标记就绪
 async function init() {
   await initDatabase();
-  return { initDatabase, prepare, query, queryOne, execute, pool };
+  ready = true;
+  for (const q of pendingQueries) {
+    q.resolve();
+  }
+  pendingQueries.length = 0;
+  return { initDatabase, prepare, query, queryOne, execute };
 }
 
 module.exports = {
   initDatabase,
   prepare,
-  prepareSync: prepare,
   query,
   queryOne,
   execute,
-  pool,
-  init
+  init,
+  getPool
 };
