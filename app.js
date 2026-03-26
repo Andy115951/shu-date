@@ -1,10 +1,20 @@
 const express = require('express');
 const session = require('express-session');
+const crypto = require('crypto');
 const path = require('path');
 require('dotenv').config();
 
 let db;
 const app = express();
+const isProduction = process.env.NODE_ENV === 'production';
+const sessionSecret = process.env.SESSION_SECRET;
+
+if (isProduction) {
+  if (!sessionSecret) {
+    throw new Error('SESSION_SECRET must be set in production');
+  }
+  app.set('trust proxy', 1);
+}
 
 // 中间件配置
 app.set('view engine', 'ejs');
@@ -12,16 +22,16 @@ app.set('views', path.join(__dirname, 'views'));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(session({
-  secret: process.env.SESSION_SECRET || 'xin_yousuo_shu_secret',
+  secret: sessionSecret || 'xin_yousuo_shu_secret',
   resave: false,
   saveUninitialized: false,
   cookie: {
-    maxAge: 7 * 24 * 60 * 60 * 1000,
     httpOnly: true,
-    secure: false, // Render需要设为true如果用HTTPS
-    sameSite: 'lax'
+    sameSite: 'lax',
+    secure: isProduction,
+    maxAge: 7 * 24 * 60 * 60 * 1000
   },
-  proxy: true // Render需要
+  proxy: isProduction
 }));
 
 // 登录中间件
@@ -36,6 +46,81 @@ async function isLoggedIn(req, res, next) {
     }
   }
   res.redirect('/login');
+}
+
+function normalizeEmail(email) {
+  if (Array.isArray(email)) {
+    email = email[0];
+  }
+
+  if (email === undefined || email === null) {
+    email = '';
+  }
+
+  if (typeof email !== 'string') {
+    return '';
+  }
+
+  return email.trim().toLowerCase();
+}
+
+function generateToken(size = 24) {
+  return crypto.randomBytes(size).toString('hex');
+}
+
+function ensureCsrfToken(req) {
+  if (!req.session.csrfToken) {
+    req.session.csrfToken = generateToken(16);
+  }
+
+  return req.session.csrfToken;
+}
+
+function requireValidCsrf(req, res, next) {
+  if (req.body?.csrfToken && req.session.csrfToken === req.body.csrfToken) {
+    return next();
+  }
+
+  return res.redirect('/admin?msg=' + encodeURIComponent('请求无效，请刷新页面后重试') + '&type=error');
+}
+
+function regenerateSession(req) {
+  return new Promise((resolve, reject) => {
+    req.session.regenerate(error => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolve();
+    });
+  });
+}
+
+function saveSession(req) {
+  return new Promise((resolve, reject) => {
+    req.session.save(error => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolve();
+    });
+  });
+}
+
+function destroySession(req) {
+  return new Promise((resolve, reject) => {
+    req.session.destroy(error => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolve();
+    });
+  });
 }
 
 // ============ 路由 ============
@@ -91,20 +176,30 @@ app.post('/login', async (req, res) => {
   // ... 后续生成验证码并发送邮件的逻辑 ...
 
   // 检查用户是否存在
-  let user = await db.queryOne('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
+  let user = await db.queryOne('SELECT * FROM users WHERE email = $1', [email]);
 
   // 生成登录验证码
-  const loginCode = Math.random().toString(36).substring(2, 10);
+  const loginCode = generateToken(24);
   const expireTime = new Date(Date.now() + 10 * 60 * 1000);
+  let writeResult;
 
   if (user) {
-    await db.execute('UPDATE users SET login_code = $1, login_code_expire = $2 WHERE id = $3',
+    writeResult = await db.execute('UPDATE users SET login_code = $1, login_code_expire = $2 WHERE id = $3',
       [loginCode, expireTime.toISOString(), user.id]);
   } else {
     // 自动注册新用户（默认已验证）
-    const result = await db.execute('INSERT INTO users (email, login_code, login_code_expire, verified) VALUES ($1, $2, $3, 1)',
-      [email.toLowerCase(), loginCode, expireTime.toISOString()]);
-    user = await db.queryOne('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
+    writeResult = await db.execute('INSERT INTO users (email, login_code, login_code_expire, verified) VALUES ($1, $2, $3, 1)',
+      [email, loginCode, expireTime.toISOString()]);
+    user = await db.queryOne('SELECT * FROM users WHERE email = $1', [email]);
+  }
+
+  if (!writeResult || writeResult.changes !== 1 || !user) {
+    return res.render('login', {
+      title: '登录',
+      message: '登录链接生成失败，请稍后重试',
+      messageType: 'error',
+      email
+    });
   }
 
   // 发送登录邮件
@@ -115,51 +210,62 @@ app.post('/login', async (req, res) => {
     res.render('login', {
       title: '登录',
       message: '验证码已发送到你的邮箱，点击邮件中的链接即可登录',
-      messageType: 'success'
+      messageType: 'success',
+      email
+    });
+  } else if (result.simulated && !isProduction) {
+    res.render('login', {
+      title: '登录',
+      message: '当前未配置邮件服务。开发环境可直接使用下方测试链接登录。',
+      messageType: 'info',
+      email,
+      debugLoginUrl: result.url
     });
   } else {
     res.render('login', {
       title: '登录',
-      message: '邮件发送失败，请使用以下链接登录（测试模式）:<br>' + result.url,
-      messageType: 'error'
+      message: '邮件发送失败，请稍后重试或联系管理员',
+      messageType: 'error',
+      email
     });
   }
 });
 
 // 验证码登录
 app.get('/login/verify/:code', async (req, res) => {
-  const code = req.params.code;
-  console.log('验证链接访问, code:', code);
-
-  // 先查看数据库中所有用户和他们的login_code
-  const allUsers = await db.query('SELECT id, email, login_code, login_code_expire FROM users');
-  console.log('所有用户:', allUsers);
-
-  const user = await db.queryOne('SELECT * FROM users WHERE login_code = $1', [code]);
-  console.log('查询结果:', user);
+  const user = await db.queryOne(`
+    UPDATE users
+    SET login_code = NULL, login_code_expire = NULL
+    WHERE login_code = $1 AND login_code_expire > NOW()
+    RETURNING id
+  `, [req.params.code]);
 
   if (!user) {
+    const expiredToken = await db.queryOne('SELECT id FROM users WHERE login_code = $1', [req.params.code]);
     return res.render('login', {
       title: '登录',
-      message: '验证码无效或已过期',
+      message: expiredToken ? '验证码已过期，请重新获取' : '验证码无效或已过期',
       messageType: 'error'
     });
   }
 
-  // 使用时间戳比较，避免时区问题
-  if (new Date(user.login_code_expire).getTime() < Date.now()) {
+  try {
+    await regenerateSession(req);
+    req.session.userId = user.id;
+    await saveSession(req);
+  } catch (error) {
+    console.error('建立登录会话失败:', error);
+    try {
+      await destroySession(req);
+    } catch (destroyError) {
+      console.error('清理登录会话失败:', destroyError);
+    }
     return res.render('login', {
       title: '登录',
-      message: '验证码已过期，请重新获取',
+      message: '登录失败，请重新获取登录链接',
       messageType: 'error'
     });
   }
-
-  console.log('验证成功, userId:', user.id);
-  await db.execute('UPDATE users SET login_code = NULL, login_code_expire = NULL WHERE id = $1', [user.id]);
-
-  req.session.userId = user.id;
-  console.log('session已设置, sessionID:', req.sessionID);
 
   res.redirect('/');
 });
@@ -239,7 +345,7 @@ app.get('/matches', isLoggedIn, async (req, res) => {
   }
 
   const matchService = require('./matchService');
-  const matches = matchService.getTopMatches(req.user.id, 10);
+  const matches = await matchService.getTopMatches(req.user.id, 10);
 
   res.render('matches', {
     title: '匹配结果',
@@ -250,16 +356,16 @@ app.get('/matches', isLoggedIn, async (req, res) => {
 });
 
 // API: 获取匹配列表
-app.get('/api/matches', isLoggedIn, (req, res) => {
+app.get('/api/matches', isLoggedIn, async (req, res) => {
   const matchService = require('./matchService');
-  const matches = matchService.findMatches(req.user.id);
+  const matches = await matchService.findMatches(req.user.id);
   res.json({ success: true, data: matches });
 });
 
 // API: 获取前5名
-app.get('/api/match/top', isLoggedIn, (req, res) => {
+app.get('/api/match/top', isLoggedIn, async (req, res) => {
   const matchService = require('./matchService');
-  const matches = matchService.getTopMatches(req.user.id, 5);
+  const matches = await matchService.getTopMatches(req.user.id, 5);
   res.json({ success: true, data: matches });
 });
 
@@ -279,12 +385,20 @@ app.get('/admin', isLoggedIn, async (req, res) => {
     user: req.user,
     users,
     weekNumber: getWeekNumber(),
+    csrfToken: ensureCsrfToken(req),
+    message: req.query.msg,
+    messageType: req.query.type,
     isAdmin: true
   });
 });
 
 // 手动触发匹配
 app.get('/admin/match', isLoggedIn, async (req, res) => {
+  if (!req.isAdmin) return res.redirect('/');
+  return res.redirect('/admin?msg=' + encodeURIComponent('请使用页面表单触发匹配') + '&type=error');
+});
+
+app.post('/admin/match', isLoggedIn, requireValidCsrf, async (req, res) => {
   if (!req.isAdmin) return res.redirect('/');
   const result = await runWeeklyMatch();
   res.redirect('/admin?msg=' + encodeURIComponent(result.message) + '&type=' + (result.success ? 'success' : 'error'));

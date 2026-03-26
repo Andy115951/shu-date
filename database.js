@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const { Pool } = require('pg');
 
 const pool = new Pool({
@@ -88,38 +89,54 @@ function convertPlaceholders(sql) {
   return converted.replace(/\?/g, () => '$' + paramIndex++);
 }
 
+function getQueryFingerprint(sql) {
+  return crypto.createHash('sha256').update(sql).digest('hex').slice(0, 12);
+}
+
+function logQueryError(operation, sql, error) {
+  const metadata = {
+    queryId: getQueryFingerprint(sql),
+    code: error?.code || null,
+    table: error?.table || null,
+    constraint: error?.constraint || null,
+    routine: error?.routine || null
+  };
+
+  console.error(`${operation}:`, metadata);
+  if (error?.stack) {
+    console.error(error.stack);
+  } else if (error?.message) {
+    console.error(error.message);
+  }
+}
+
 function prepare(sql) {
   const converted = convertPlaceholders(sql);
   return {
     run: async function(...params) {
-      console.log('SQL run:', converted, 'params:', params);
       try {
         const result = await pool.query(converted, params);
         return { changes: result.rowCount };
       } catch (e) {
-        console.error('SQL Error:', e.message);
+        logQueryError('SQL执行失败', converted, e);
         return { changes: 0 };
       }
     },
     get: async function(...params) {
-      console.log('SQL get:', converted, 'params:', params);
       try {
         const result = await pool.query(converted, params);
-        const row = result.rows[0];
-        console.log('SQL result:', row);
-        return row;
+        return result.rows[0];
       } catch (e) {
-        console.error('SQL Error:', e.message);
+        logQueryError('SQL查询失败', converted, e);
         return undefined;
       }
     },
     all: async function(...params) {
-      console.log('SQL all:', converted, 'params:', params);
       try {
         const result = await pool.query(converted, params);
         return result.rows;
       } catch (e) {
-        console.error('SQL Error:', e.message);
+        logQueryError('SQL查询失败', converted, e);
         return [];
       }
     }
