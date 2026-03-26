@@ -11,17 +11,23 @@ function getPoolConfig() {
     adjustedUrl = connectionString.replace(':5432/', ':6543/');
   }
 
+  // 提取主机名并强制IPv4
+  const url = new URL(connectionString.replace(':6543/', ':5432/'));
+  const host = url.hostname;
+
   return {
-    connectionString: adjustedUrl,
+    host: host,
+    port: 5432,
+    database: 'postgres',
+    user: url.username,
+    password: url.password,
     ssl: {
-      rejectUnauthorized: false,
-      ca: undefined,
-      key: undefined,
-      cert: undefined
+      rejectUnauthorized: false
     },
-    max: 20,
+    family: 4, // 强制IPv4
+    max: 10,
     idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 10000
+    connectionTimeoutMillis: 15000
   };
 }
 
