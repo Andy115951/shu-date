@@ -99,10 +99,12 @@ function saveDatabase() {
 
 // SQL辅助函数
 function prepare(sql) {
+  const converted = convertSQL(sql);
   return {
     run: function(...params) {
+      console.log('SQL run:', converted, 'params:', params);
       try {
-        db.run(convertSQL(sql), params);
+        db.run(converted, params);
         saveDatabase();
         return { changes: db.getRowsModified() };
       } catch (e) {
@@ -111,12 +113,14 @@ function prepare(sql) {
       }
     },
     get: function(...params) {
+      console.log('SQL get:', converted, 'params:', params);
       try {
-        const stmt = db.prepare(convertSQL(sql));
+        const stmt = db.prepare(converted);
         stmt.bind(params);
         if (stmt.step()) {
           const row = stmt.getAsObject();
           stmt.free();
+          console.log('SQL result:', row);
           return row;
         }
         stmt.free();
@@ -127,8 +131,9 @@ function prepare(sql) {
       }
     },
     all: function(...params) {
+      console.log('SQL all:', converted, 'params:', params);
       try {
-        const stmt = db.prepare(convertSQL(sql));
+        const stmt = db.prepare(converted);
         stmt.bind(params);
         const results = [];
         while (stmt.step()) {
