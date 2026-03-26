@@ -1,26 +1,69 @@
 /**
  * 生成测试数据脚本
- * 用于测试匹配算法
+ * 直接写入当前 DATABASE_URL 指向的 PostgreSQL 数据库。
  */
 
-const initSqlJs = require('sql.js');
-const fs = require('fs');
-const path = require('path');
+require('dotenv').config();
+const db = require('./database');
 
-const dbPath = path.join(__dirname, 'shu.db');
+function getProfileFields(user) {
+  return Object.keys(user).filter(key => key !== 'email' && key !== 'name');
+}
 
-async function generateTestData() {
-  const SQL = await initSqlJs();
-  let db;
+function buildProfileUpsertSql(profileFields) {
+  const columns = ['user_id', ...profileFields];
+  const placeholders = columns.map((_, index) => `$${index + 1}`).join(', ');
+  const updateClauses = profileFields
+    .map(field => `${field} = EXCLUDED.${field}`)
+    .join(', ');
 
-  if (fs.existsSync(dbPath)) {
-    db = new SQL.Database(fs.readFileSync(dbPath));
-  } else {
-    console.log('数据库不存在，请先启动一次服务器');
-    return;
+  return `
+    INSERT INTO profiles (${columns.join(', ')})
+    VALUES (${placeholders})
+    ON CONFLICT (user_id) DO UPDATE SET
+      ${updateClauses},
+      updated_at = NOW()
+  `;
+}
+
+async function upsertUser(user) {
+  const existingUser = await db.queryOne('SELECT id FROM users WHERE email = $1', [user.email]);
+
+  if (existingUser) {
+    await db.execute(
+      'UPDATE users SET name = $1, verified = 1, login_code = NULL, login_code_expire = NULL WHERE id = $2',
+      [user.name, existingUser.id]
+    );
+    console.log(`更新用户: ${user.email}`);
+    return { id: existingUser.id, created: false };
   }
 
-  // 测试用户数据（模拟不同类型的学生）
+  const createdUser = await db.queryOne(
+    `INSERT INTO users (email, name, verified, login_code, login_code_expire)
+     VALUES ($1, $2, 1, NULL, NULL)
+     RETURNING id`,
+    [user.email, user.name]
+  );
+
+  console.log(`创建用户: ${user.email}`);
+  return { id: createdUser.id, created: true };
+}
+
+async function upsertProfile(userId, user) {
+  const profileFields = getProfileFields(user);
+  const sql = buildProfileUpsertSql(profileFields);
+  const params = [userId, ...profileFields.map(field => user[field])];
+
+  await db.execute(sql, params);
+}
+
+async function generateTestData() {
+  if (!process.env.DATABASE_URL) {
+    throw new Error('请先配置 DATABASE_URL，再运行测试数据脚本');
+  }
+
+  await db.initDatabase();
+
   const testUsers = [
     {
       email: 'test1@shu.edu.cn',
@@ -304,50 +347,31 @@ async function generateTestData() {
     }
   ];
 
-  // 插入用户和问卷数据
+  let createdUsers = 0;
+  let updatedUsers = 0;
+
   for (const user of testUsers) {
-    // 检查用户是否已存在
-    const existingUser = db.exec(`SELECT id FROM users WHERE email = '${user.email}'`);
-
-    let userId;
-    if (existingUser.length > 0 && existingUser[0].values.length > 0) {
-      userId = existingUser[0].values[0][0];
-      console.log(`用户 ${user.email} 已存在，更新数据`);
+    const result = await upsertUser(user);
+    if (result.created) {
+      createdUsers += 1;
     } else {
-      // 创建用户
-      const loginCode = 'test' + Math.random().toString(36).substring(2, 8);
-      const expireTime = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-
-      db.run(`INSERT INTO users (email, name, verified, login_code, login_code_expire) VALUES (?, ?, 1, ?, ?)`,
-        [user.email, user.name, loginCode, expireTime]);
-
-      const newUser = db.exec(`SELECT id FROM users WHERE email = '${user.email}'`);
-      userId = newUser[0].values[0][0];
-      console.log(`创建用户: ${user.email}`);
+      updatedUsers += 1;
     }
 
-    // 插入或更新问卷
-    const existingProfile = db.exec(`SELECT id FROM profiles WHERE user_id = ${userId}`);
-
-    const profileFields = Object.keys(user).filter(k => k !== 'email' && k !== 'name');
-    const fieldList = ['user_id', ...profileFields].join(', ');
-    const placeholders = profileFields.map(() => '?').join(', ');
-
-    const values = [userId, ...profileFields.map(f => user[f])];
-
-    if (existingProfile.length > 0 && existingProfile[0].values.length > 0) {
-      const setClauses = profileFields.map(f => `${f} = ?`).join(', ');
-      db.run(`UPDATE profiles SET ${setClauses}, updated_at = datetime('now') WHERE user_id = ?`,
-        [...profileFields.map(f => user[f]), userId]);
-    } else {
-      db.run(`INSERT INTO profiles (${fieldList}) VALUES (?, ${placeholders})`, values);
-    }
+    await upsertProfile(result.id, user);
   }
 
-  // 保存数据库
-  fs.writeFileSync(dbPath, Buffer.from(db.export()));
   console.log('\n✅ 测试数据生成完成！');
-  console.log(`共 ${testUsers.length} 个测试用户`);
+  console.log(`共处理 ${testUsers.length} 个测试用户`);
+  console.log(`新增用户: ${createdUsers}`);
+  console.log(`更新用户: ${updatedUsers}`);
 }
 
-generateTestData().catch(console.error);
+generateTestData()
+  .catch(error => {
+    console.error('❌ 测试数据生成失败:', error.message);
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    await db.getPool().end();
+  });
