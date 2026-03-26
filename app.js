@@ -115,9 +115,14 @@ app.post('/login', async (req, res) => {
 
 // 验证码登录
 app.get('/login/verify/:code', async (req, res) => {
-  console.log('验证链接访问, code:', req.params.code);
+  const code = req.params.code;
+  console.log('验证链接访问, code:', code);
 
-  const user = await db.queryOne('SELECT * FROM users WHERE login_code = ?', [req.params.code]);
+  // 先查看数据库中所有用户和他们的login_code
+  const allUsers = await db.query('SELECT id, email, login_code, login_code_expire FROM users');
+  console.log('所有用户:', allUsers);
+
+  const user = await db.queryOne('SELECT * FROM users WHERE login_code = ?', [code]);
   console.log('查询结果:', user);
 
   if (!user) {
