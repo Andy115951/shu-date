@@ -16,4 +16,11 @@
     </div>
     <button type="submit" class="btn">发送登录链接</button>
   </form>
+
+  <% if (typeof debugLoginUrl !== 'undefined' && debugLoginUrl) { %>
+    <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #eee;">
+      <p style="margin-bottom: 10px; color: #666;">测试登录链接：</p>
+      <a href="<%= debugLoginUrl %>" style="word-break: break-all;"><%= debugLoginUrl %></a>
+    </div>
+  <% } %>
 </div>

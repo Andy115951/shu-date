@@ -1,11 +1,7 @@
 const { Resend } = require('resend');
 require('dotenv').config();
 
-console.log('邮件配置:', {
-  provider: 'Resend',
-  from: process.env.FROM_EMAIL || 'no-reply@shudate.xyz',
-  apiKey: process.env.RESEND_API_KEY ? '已设置' : '未设置'
-});
+const isProduction = process.env.NODE_ENV === 'production';
 
 let resend = null;
 
@@ -28,12 +24,14 @@ function isMailConfigured() {
 // 发送登录验证码邮件
 async function sendLoginEmail(email, loginCode) {
   const r = getResend();
-  const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
-  const loginUrl = `${baseUrl}/login/verify/${loginCode}`;
+  const loginUrl = `${process.env.BASE_URL}/login/verify/${loginCode}`;
 
   if (!r) {
-    console.log('邮件模拟模式: 登录验证码', loginCode);
-    return { success: false, code: loginCode, url: loginUrl };
+    if (!isProduction) {
+      console.log('邮件模拟模式已启用，请使用页面展示的测试登录链接。');
+      return { success: false, simulated: true, url: loginUrl };
+    }
+    return { success: false, error: 'mail-not-configured' };
   }
 
   try {
@@ -62,7 +60,7 @@ async function sendLoginEmail(email, loginCode) {
     return { success: true };
   } catch (error) {
     console.error('❌ 发送邮件失败:', error.message);
-    return { success: false, code: loginCode, url: loginUrl, error: error.message };
+    return { success: false, url: loginUrl, error: error.message };
   }
 }
 
