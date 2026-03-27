@@ -80,6 +80,7 @@ async function upsertUser(user) {
     console.log(`更新用户: ${user.email}`);
     return { id: existingUser.id, created: false };
   }
+];
 
   const createdUser = await db.queryOne(
     `INSERT INTO users (email, name, verified, login_code, login_code_expire)

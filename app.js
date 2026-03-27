@@ -151,9 +151,20 @@ app.get('/login', (req, res) => {
 
 // 发送登录验证码
 app.post('/login', async (req, res) => {
-  const email = normalizeEmail(req.body.email);
+  const { email } = req.body;
+  const lowerEmail = email.toLowerCase();
 
-  if (!email.endsWith('@shu.edu.cn')) {
+  // 1. 定义白名单（把开发者的邮箱放这里）
+  const whiteList = [
+    'kingguog@gmail.com',
+    'joyce_guoy@163.com' // 也可以加上你自己的常用邮箱方便测试
+  ];
+
+  // 2. 只有既不在白名单，又不符合学校后缀的邮箱才会被拦截
+  const isWhiteListed = whiteList.includes(lowerEmail);
+  const isShuEmail = lowerEmail.endsWith('@shu.edu.cn');
+
+  if (!isWhiteListed && !isShuEmail) {
     return res.render('login', {
       title: '登录',
       message: '只能使用 @shu.edu.cn 结尾的学校邮箱',
@@ -161,6 +172,8 @@ app.post('/login', async (req, res) => {
       email
     });
   }
+
+  // ... 后续生成验证码并发送邮件的逻辑 ...
 
   // 检查用户是否存在
   let user = await db.queryOne('SELECT * FROM users WHERE email = $1', [email]);
@@ -220,12 +233,17 @@ app.post('/login', async (req, res) => {
 
 // 验证码登录
 app.get('/login/verify/:code', async (req, res) => {
+  console.log('[DEBUG] /login/verify 接收到的 code:', req.params.code);
+  console.log('[DEBUG] 当前时间:', new Date().toISOString());
+
   const user = await db.queryOne(`
     UPDATE users
     SET login_code = NULL, login_code_expire = NULL
     WHERE login_code = $1 AND login_code_expire > NOW()
     RETURNING id
   `, [req.params.code]);
+
+  console.log('[DEBUG] 查询结果 user:', user);
 
   if (!user) {
     const expiredToken = await db.queryOne('SELECT id FROM users WHERE login_code = $1', [req.params.code]);

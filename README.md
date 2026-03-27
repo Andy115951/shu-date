@@ -23,7 +23,7 @@
 
 ## 快速开始
 
-1. 打开 shudate.xyz
+1. 打开 https://shudate.xyz/login
 2. 输入 @shu.edu.cn 邮箱
 3. 点击发送登录链接
 4. 邮箱中点击登录链接完成登录
