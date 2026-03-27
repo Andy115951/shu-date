@@ -158,14 +158,17 @@ shu-date/
 - **后端服务**: https://xin-yousuo-shu.onrender.com
 
 ### 4.2 环境变量
-| 变量名 | 必需 | 说明 |
-|--------|------|------|
-| NODE_ENV | 是 | 环境模式：`development` 或 `production` |
-| RESEND_API_KEY | 是 | Resend 邮件服务密钥 |
-| FROM_EMAIL | 否 | 发件人邮箱 |
-| BASE_URL | 否 | 应用基础URL |
-| SESSION_SECRET | 否 | Session 密钥 |
-| DB_PATH | 否 | 数据库文件路径 |
+
+| 变量名 | 必需 | 环境 | 说明 |
+|--------|------|------|------|
+| `NODE_ENV` | 是 | 全部 | 环境模式：`development` 或 `production` |
+| `DATABASE_URL` | 是 | 全部 | Supabase PostgreSQL 连接字符串 |
+| `SUPABASE_KEY` | 否 | 全部 | Supabase API Key |
+| `RESEND_API_KEY` | 生产必需 | 生产 | Resend 邮件服务密钥 |
+| `FROM_EMAIL` | 否 | 生产 | 发件人邮箱 |
+| `BASE_URL` | 否 | 全部 | 应用基础URL |
+| `SESSION_SECRET` | 生产必需 | 生产 | Session 密钥（32位以上随机字符串） |
+| `PORT` | 否 | 全部 | 端口号，默认 3000 |
 
 ### 4.3 环境区分
 
@@ -173,13 +176,47 @@ shu-date/
 
 | 环境 | NODE_ENV | 特性 |
 |------|----------|------|
-| 本地开发 | `development` 或未设置 | 显示测试登录链接、一键填写按钮 |
+| 本地开发 | `development` 或未设置 | 显示测试登录链接、问卷一键填写按钮 |
 | 正式部署 | `production` | 隐藏测试功能，仅显示正常提示 |
 
-**Render 配置方法**：
+**开发环境特性**：
+- 登录页显示"开发模式：点击直接登录"按钮
+- 问卷页显示"一键填写（测试）"按钮
+- 不需要配置 RESEND_API_KEY
+
+**生产环境特性**：
+- 强制要求 `SESSION_SECRET`
+- Cookie 设置 `secure: true`
+- 必须配置 `RESEND_API_KEY` 才能发送邮件
+
+### 4.4 本地开发配置示例
+
+```bash
+# .env 文件（开发环境）
+NODE_ENV=development
+DATABASE_URL=postgresql://postgres.xxx:密码@xxx.supabase.com:6543/postgres
+BASE_URL=http://localhost:3000
+SESSION_SECRET=任意随机字符串
+PORT=3000
+
+# 邮件服务（开发环境可选，不配置会显示测试链接）
+# RESEND_API_KEY=re_xxx
+# FROM_EMAIL=no-reply@xxx.com
+```
+
+### 4.5 Render 配置方法
+
 1. 登录 Render 后台
 2. 选择服务 → Environment
-3. 添加 `NODE_ENV=production`
+3. 添加以下变量：
+   ```
+   NODE_ENV=production
+   DATABASE_URL=你的Supabase连接字符串
+   RESEND_API_KEY=re_xxx
+   FROM_EMAIL=no-reply@你的域名
+   SESSION_SECRET=32位以上随机字符串
+   BASE_URL=https://你的域名
+   ```
 4. 保存后自动重新部署
 
 ### 4.4 已知限制

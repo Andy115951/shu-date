@@ -282,7 +282,8 @@ app.get('/profile', isLoggedIn, async (req, res) => {
     title: '填写问卷',
     user: req.user,
     profile,
-    isAdmin: req.isAdmin
+    isAdmin: req.isAdmin,
+    isDev: !isProduction
   });
 });
 

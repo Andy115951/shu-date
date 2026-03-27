@@ -26,6 +26,14 @@
       </div>
     <% } %>
 
+    <% if (typeof debugLoginUrl !== 'undefined' && debugLoginUrl) { %>
+      <div style="margin-top: 16px; text-align: center;">
+        <a href="<%= debugLoginUrl %>" class="btn" style="background: var(--primary); color: white;">
+          🔧 开发模式：点击直接登录
+        </a>
+      </div>
+    <% } %>
+
     <form action="/login" method="POST">
       <div class="form-group">
         <input type="email" name="email" placeholder="你的学校邮箱" value="<%= typeof email !== 'undefined' ? email : '' %>" required style="text-align: center; font-size: 16px;">
