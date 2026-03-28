@@ -162,16 +162,19 @@ app.get('/', async (req, res) => {
   console.log('[DEBUG] 首页 sessionID:', req.sessionID, 'userId:', req.session.userId);
   console.log('[DEBUG] 首页接收到的 Cookie:', req.headers.cookie);
   let user = null;
+  let isAdmin = false;
   if (req.session.userId) {
     const u = await db.queryOne('SELECT * FROM users WHERE id = $1', [req.session.userId]);
     if (u) {
       const profile = await db.queryOne('SELECT * FROM profiles WHERE user_id = $1', [u.id]);
       user = { ...u, hasProfile: !!profile };
+      isAdmin = u.email === 'admin@shu.edu.cn';
     }
   }
   res.render('index', {
     title: '首页',
     user: user,
+    isAdmin,
     message: req.query.msg,
     messageType: req.query.type
   });
@@ -258,6 +261,32 @@ app.post('/login', async (req, res) => {
     });
   }
 });
+
+// 开发环境：快速登录 API
+if (!isProduction) {
+  app.get('/dev/login/:email', async (req, res) => {
+    const email = req.params.email.toLowerCase() + '@shu.edu.cn';
+
+    // 查找或创建用户
+    let user = await db.queryOne('SELECT id FROM users WHERE email = $1', [email]);
+    if (!user) {
+      await db.execute('INSERT INTO users (email, verified) VALUES ($1, 1)', [email]);
+      user = await db.queryOne('SELECT id FROM users WHERE email = $1', [email]);
+    }
+
+    if (!user) {
+      return res.redirect('/login?msg=' + encodeURIComponent('登录失败') + '&type=error');
+    }
+
+    // 建立会话
+    await regenerateSession(req);
+    req.session.userId = user.id;
+    await saveSession(req);
+
+    console.log('[DEV] 快速登录:', email, 'userId:', user.id);
+    res.redirect('/');
+  });
+}
 
 // 验证码登录
 app.get('/login/verify/:code', async (req, res) => {
@@ -463,23 +492,91 @@ app.get('/api/match/top', isLoggedIn, async (req, res) => {
 app.get('/admin', isLoggedIn, async (req, res) => {
   if (!req.isAdmin) return res.redirect('/');
 
+  // 统计数据
+  const stats = await db.queryOne(`
+    SELECT
+      (SELECT COUNT(*) FROM users) as totalUsers,
+      (SELECT COUNT(*) FROM users WHERE verified = 1) as verifiedUsers,
+      (SELECT COUNT(*) FROM profiles) as profileCount,
+      (SELECT COUNT(*) FROM matches WHERE week_number = $1) as weekMatches
+  `, [getWeekNumber()]);
+
+  // 用户列表（含问卷基本信息）
   const users = await db.query(`
-    SELECT u.*, CASE WHEN p.id IS NOT NULL THEN 1 ELSE 0 END as hasProfile
+    SELECT u.*,
+      CASE WHEN p.id IS NOT NULL THEN 1 ELSE 0 END as hasProfile,
+      p.gender, p.my_grade, p.campus, p.lovetype_code
     FROM users u
     LEFT JOIN profiles p ON u.id = p.user_id
     ORDER BY u.created_at DESC
   `);
 
+  // 本周匹配记录
+  const matches = await db.query(`
+    SELECT m.*,
+      u1.email as email1, u1.name as name1, p1.my_grade as grade1, p1.campus as campus1,
+      u2.email as email2, u2.name as name2, p2.my_grade as grade2, p2.campus as campus2
+    FROM matches m
+    LEFT JOIN users u1 ON m.user_id_1 = u1.id
+    LEFT JOIN users u2 ON m.user_id_2 = u2.id
+    LEFT JOIN profiles p1 ON m.user_id_1 = p1.user_id
+    LEFT JOIN profiles p2 ON m.user_id_2 = p2.user_id
+    WHERE m.week_number = $1
+    ORDER BY m.matched_at DESC
+  `, [getWeekNumber()]);
+
   res.render('admin', {
-    title: '管理',
+    title: '管理后台',
     user: req.user,
     users,
+    matches,
+    stats,
     weekNumber: getWeekNumber(),
     csrfToken: ensureCsrfToken(req),
     message: req.query.msg,
     messageType: req.query.type,
     isAdmin: true
   });
+});
+
+// API: 获取用户详情
+app.get('/admin/user/:id', isLoggedIn, async (req, res) => {
+  if (!req.isAdmin) return res.status(403).json({ error: '无权限' });
+
+  const user = await db.queryOne('SELECT * FROM users WHERE id = $1', [req.params.id]);
+  if (!user) return res.status(404).json({ error: '用户不存在' });
+
+  const profile = await db.queryOne('SELECT * FROM profiles WHERE user_id = $1', [req.params.id]);
+
+  res.json({ user, profile });
+});
+
+// API: 手动配对
+app.post('/admin/pair', isLoggedIn, async (req, res) => {
+  if (!req.isAdmin) return res.status(403).json({ error: '无权限' });
+
+  const { user1Id, user2Id } = req.body;
+  if (!user1Id || !user2Id || user1Id === user2Id) {
+    return res.status(400).json({ error: '请选择两个不同的用户' });
+  }
+
+  // 检查是否已匹配
+  const existing = await db.queryOne(`
+    SELECT id FROM matches
+    WHERE ((user_id_1 = $1 AND user_id_2 = $2) OR (user_id_1 = $2 AND user_id_2 = $1))
+    AND week_number = $3
+  `, [user1Id, user2Id, getWeekNumber()]);
+
+  if (existing) {
+    return res.status(400).json({ error: '这两个用户本周已匹配' });
+  }
+
+  await db.execute(`
+    INSERT INTO matches (user_id_1, user_id_2, score, week_number)
+    VALUES ($1, $2, 1.0, $3)
+  `, [user1Id, user2Id, getWeekNumber()]);
+
+  res.json({ success: true, message: '配对成功' });
 });
 
 // 手动触发匹配

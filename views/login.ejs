@@ -195,7 +195,10 @@
     <div class="dev-modal-body">
       <div class="dev-section">
         <div class="dev-section-title">快速登录</div>
-        <a href="/login/verify/abc123456" class="dev-btn primary">🚀 测试用户一键登录</a>
+        <a href="#" id="devLoginLink" class="dev-btn primary" onclick="return devLogin()">🚀 登录当前输入的邮箱</a>
+        <p style="font-size: 12px; color: #888; margin-top: 8px; text-align: center;">
+          在上方输入邮箱前缀，然后点击此按钮
+        </p>
       </div>
       <div class="dev-section">
         <div class="dev-section-title">环境信息</div>
@@ -219,6 +222,15 @@
         modal.classList.remove('show');
       }
     });
+    function devLogin() {
+      const prefix = document.getElementById('emailPrefix').value.trim();
+      if (!prefix) {
+        alert('请先输入邮箱前缀');
+        return false;
+      }
+      window.location.href = '/dev/login/' + encodeURIComponent(prefix);
+      return false;
+    }
   </script>
   <% } %>
 </body>
