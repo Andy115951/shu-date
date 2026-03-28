@@ -22,6 +22,14 @@ app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
+
+// 全局视图变量
+app.use((req, res, next) => {
+  res.locals.isDev = !isProduction;
+  res.locals.port = process.env.PORT || 3000;
+  next();
+});
+
 app.use(session({
   secret: sessionSecret || 'xin_yousuo_shu_secret',
   resave: false,
@@ -240,14 +248,6 @@ app.post('/login', async (req, res) => {
       message: '验证码已发送到你的邮箱，点击邮件中的链接即可登录',
       messageType: 'success',
       email
-    });
-  } else if (result.simulated && !isProduction) {
-    res.render('login', {
-      title: '登录',
-      message: '当前未配置邮件服务。开发环境可直接使用下方测试链接登录。',
-      messageType: 'info',
-      email,
-      debugLoginUrl: result.url
     });
   } else {
     res.render('login', {
