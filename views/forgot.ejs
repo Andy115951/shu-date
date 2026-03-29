@@ -28,7 +28,7 @@
 
       <form action="/forgot" method="POST">
         <div class="form-group">
-          <input type="email" name="email" placeholder="学校邮箱 (@shu.edu.cn)" value="<%= typeof email !== 'undefined' ? email : '' %>" required style="text-align: center; font-size: 16px;">
+          <input type="email" name="email" placeholder="学校邮箱 (@shu.edu.cn)" value="<%= typeof email !== 'undefined' ? email : '' %>" autocomplete="username" aria-label="学校邮箱" autocapitalize="none" autocorrect="off" inputmode="email" required style="text-align: center; font-size: 16px;">
         </div>
         <button type="submit" class="btn" style="width: 100%;">发送重置链接</button>
       </form>
