@@ -118,10 +118,23 @@ async function findUserByEmailInsensitive(email) {
     return null;
   }
 
-  return db.queryOne(
-    'SELECT * FROM users WHERE LOWER(email) = $1 ORDER BY id ASC LIMIT 1',
+  const exactUser = await db.queryOne(
+    'SELECT * FROM users WHERE email = $1',
     [normalizedEmail]
   );
+  if (exactUser) {
+    return exactUser;
+  }
+
+  const legacyMatches = await db.query(
+    'SELECT * FROM users WHERE LOWER(email) = $1 ORDER BY verified DESC, created_at DESC, id DESC LIMIT 2',
+    [normalizedEmail]
+  );
+  if (legacyMatches.length > 1) {
+    console.warn(`检测到邮箱大小写不一致的重复记录: ${normalizedEmail}`);
+  }
+
+  return legacyMatches[0] || null;
 }
 
 function generateToken(size = 24) {
