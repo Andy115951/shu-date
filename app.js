@@ -112,6 +112,18 @@ function normalizeEmail(email) {
   return email.trim().toLowerCase();
 }
 
+async function findUserByEmailInsensitive(email) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) {
+    return null;
+  }
+
+  return db.queryOne(
+    'SELECT * FROM users WHERE LOWER(email) = $1 ORDER BY id ASC LIMIT 1',
+    [normalizedEmail]
+  );
+}
+
 function generateToken(size = 24) {
   return crypto.randomBytes(size).toString('hex');
 }
@@ -252,7 +264,7 @@ app.post('/forgot', wrapAsync(async (req, res) => {
   }
 
   // 查找用户
-  const user = await db.queryOne('SELECT * FROM users WHERE email = $1', [lowerEmail]);
+  const user = await findUserByEmailInsensitive(lowerEmail);
 
   if (!user) {
     return res.render('forgot', {
@@ -410,7 +422,7 @@ app.post('/register', wrapAsync(async (req, res) => {
   }
 
   // 检查用户是否已存在
-  const existingUser = await db.queryOne('SELECT * FROM users WHERE email = $1', [lowerEmail]);
+  const existingUser = await findUserByEmailInsensitive(lowerEmail);
 
   if (existingUser) {
     // 检查是否已完成注册（密码和昵称都有）
@@ -499,7 +511,7 @@ app.post('/login', wrapAsync(async (req, res) => {
   }
 
   // 查找用户
-  const user = await db.queryOne('SELECT * FROM users WHERE email = $1', [lowerEmail]);
+  const user = await findUserByEmailInsensitive(lowerEmail);
 
   if (!user) {
     return res.redirect('/login?method=register&email=' + encodeURIComponent(lowerEmail) + '&msg=' + encodeURIComponent('账号不存在，请先注册') + '&type=error');
@@ -587,7 +599,7 @@ app.post('/login/code', wrapAsync(async (req, res) => {
   }
 
   // 检查用户是否存在
-  let user = await db.queryOne('SELECT * FROM users WHERE email = $1', [lowerEmail]);
+  let user = await findUserByEmailInsensitive(lowerEmail);
 
   // 如果用户存在但没有密码或昵称，视为未完成注册
   if (user && (!user.password_hash || !user.nickname || !user.email)) {
@@ -610,7 +622,7 @@ app.post('/login/code', wrapAsync(async (req, res) => {
       'INSERT INTO users (email, login_code, login_code_expire, verified) VALUES ($1, $2, $3, 1)',
       [lowerEmail, loginCode, expireTime.toISOString()]
     );
-    user = await db.queryOne('SELECT * FROM users WHERE email = $1', [lowerEmail]);
+    user = await findUserByEmailInsensitive(lowerEmail);
   }
 
   if (!writeResult || writeResult.changes !== 1 || !user) {
