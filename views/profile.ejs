@@ -595,7 +595,7 @@
       <div class="form-group">
         <label>6(a). 我的身高（cm）：</label>
         <div class="range-container">
-          <input type="range" class="range-slider" name="height" id="myHeight" min="140" max="200" value="<%= profile && profile.height ? profile.height_min : 170 %>" oninput="updateMyHeightDisplay()">
+          <input type="range" class="range-slider" name="height" id="myHeight" min="140" max="200" value="<%= profile && profile.height ? profile.height : 170 %>" oninput="updateMyHeightDisplay()">
           <div class="range-labels">
             <span>140cm</span>
             <span>170cm</span>
@@ -1146,11 +1146,31 @@
 
       <div class="form-group">
         <label>22. 谈恋爱期间，我期待的线下见面频率大约是：</label>
-        <div class="option-group">
-          <label><input type="radio" name="meeting_frequency" value="几乎每天" <%= profile && profile.meeting_frequency === '几乎每天' ? 'checked' : '' %> required> A. 几乎每天</label>
-          <label><input type="radio" name="meeting_frequency" value="一周3-4次" <%= profile && profile.meeting_frequency === '一周3-4次' ? 'checked' : '' %>> B. 一周3-4次</label>
-          <label><input type="radio" name="meeting_frequency" value="一周1-2次" <%= profile && profile.meeting_frequency === '一周1-2次' ? 'checked' : '' %>> C. 一周1-2次</label>
-          <label><input type="radio" name="meeting_frequency" value="两周及以上1次" <%= profile && profile.meeting_frequency === '两周及以上1次' ? 'checked' : '' %>> D. 两周及以上1次</label>
+        <div class="scale-horizontal">
+          <span class="scale-label-text scale-label-left_text">每天</span>
+          <div class="scale-options-row">
+            <label class="scale-option <%= profile && profile.meeting_frequency === '-2' ? 'selected' : '' %>">
+              <input type="radio" name="meeting_frequency" value="-2" <%= profile && profile.meeting_frequency === '-2' ? 'checked' : '' %> required>
+              <span class="scale-circle">-2</span>
+            </label>
+            <label class="scale-option <%= profile && profile.meeting_frequency === '-1' ? 'selected' : '' %>">
+              <input type="radio" name="meeting_frequency" value="-1" <%= profile && profile.meeting_frequency === '-1' ? 'checked' : '' %>>
+              <span class="scale-circle">-1</span>
+            </label>
+            <label class="scale-option <%= profile && profile.meeting_frequency === '0' ? 'selected' : '' %>">
+              <input type="radio" name="meeting_frequency" value="0" <%= profile && profile.meeting_frequency === '0' ? 'checked' : '' %>>
+              <span class="scale-circle">0</span>
+            </label>
+            <label class="scale-option <%= profile && profile.meeting_frequency === '1' ? 'selected' : '' %>">
+              <input type="radio" name="meeting_frequency" value="1" <%= profile && profile.meeting_frequency === '1' ? 'checked' : '' %>>
+              <span class="scale-circle">+1</span>
+            </label>
+            <label class="scale-option <%= profile && profile.meeting_frequency === '2' ? 'selected' : '' %>">
+              <input type="radio" name="meeting_frequency" value="2" <%= profile && profile.meeting_frequency === '2' ? 'checked' : '' %>>
+              <span class="scale-circle">+2</span>
+            </label>
+          </div>
+          <span class="scale-label-text scale-label-right_text">两周及以上1次</span>
         </div>
       </div>
 
@@ -1306,10 +1326,8 @@
       <p class="interest-counter" id="interestCounter">最多选 5 项，已选 0 项</p>
     </div>
 
-
-
     <div class="form-group">
-      <label>32. 我希望伴侣和自己有相似的兴趣爱好：</label>
+      <label>25. 我希望伴侣和自己有相似的兴趣爱好：</label>
       <div class="scale-horizontal">
         <span class="scale-label-text scale-label-left_text">更喜欢互补</span>
         <div class="scale-options-row">
@@ -1338,6 +1356,7 @@
       </div>
     </div>
   </div>
+  
 <!-- 四、Love Type16 恋爱类型测试 -->
 <div class="form-section">
   <h3 style="color: #e74c3c; margin: 20px 0 15px;"> 四、Love Type16 恋爱类型测试 </h3>
