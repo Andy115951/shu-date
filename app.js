@@ -177,7 +177,7 @@ if (isProduction) {
     throw new Error('SESSION_SECRET must be set in production');
   }
   if (adminEmails.size === 0) {
-    console.warn('ADMIN_EMAILS is empty in production; admin routes will be inaccessible.');
+    throw new Error('ADMIN_EMAILS must be set to at least one valid admin email in production');
   }
   app.set('trust proxy', 1);
 }
