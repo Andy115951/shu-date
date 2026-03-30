@@ -101,13 +101,26 @@ function scorePurpose(myProfile, theirProfile) {
   return 0;
 }
 
-// core_traits 每相同一项：+2分
+// core_traits 每相同一项：+2分（最多3项，满分6分）
 function scoreCoreTraits(myProfile, theirProfile) {
   const myTraits = parseTagsField(myProfile.core_traits);
   const theirTraits = parseTagsField(theirProfile.core_traits);
   if (myTraits.length === 0 || theirTraits.length === 0) return 0;
-  const matches = myTraits.filter(t => theirTraits.includes(t));
-  return matches.length * 2;
+
+  // 按唯一值去重后计算交集数量
+  const mySet = new Set(myTraits);
+  const theirSet = new Set(theirTraits);
+
+  let matchCount = 0;
+  for (const trait of mySet) {
+    if (theirSet.has(trait)) {
+      matchCount += 1;
+    }
+  }
+
+  // 最多按3项计分（每项2分，满分6分）
+  const cappedMatches = Math.min(matchCount, 3);
+  return cappedMatches * 2;
 }
 
 // 14个维度欧几里得距离打分：每题4分（共56分）
