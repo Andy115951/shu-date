@@ -47,6 +47,8 @@ function wrapAsync(fn) {
 }
 
 const AUTH_RATE_LIMIT_MESSAGE = '请求过于频繁，请稍后再试。';
+const MAX_EMAIL_LENGTH_FOR_KEY = 320;
+const MAX_CODE_LENGTH_FOR_KEY = 256;
 
 function buildLoginRedirectPath(method, email) {
   const params = new URLSearchParams({
@@ -60,13 +62,19 @@ function buildLoginRedirectPath(method, email) {
 
 function redirectWithMessage(res, path, message, type = 'error') {
   const separator = path.includes('?') ? '&' : '?';
-  return res.redirect(`${path}${separator}msg=${encodeURIComponent(message)}&type=${encodeURIComponent(type)}`);
+  return res.redirect(303, `${path}${separator}msg=${encodeURIComponent(message)}&type=${encodeURIComponent(type)}`);
+}
+
+function hashRateLimitFragment(value) {
+  return crypto.createHash('sha256').update(value).digest('hex');
 }
 
 function getEmailScopedRateLimitKey(req) {
   const ipKey = ipKeyGenerator(req.ip || '');
-  const email = normalizeEmail(req.body?.email);
-  return email ? `${ipKey}:email:${email}` : ipKey;
+  const rawEmail = typeof req.body?.email === 'string' ? req.body.email : '';
+  const limitedEmail = rawEmail.slice(0, MAX_EMAIL_LENGTH_FOR_KEY);
+  const email = normalizeEmail(limitedEmail);
+  return email ? `${ipKey}:email:${hashRateLimitFragment(email)}` : ipKey;
 }
 
 function getUserScopedRateLimitKey(req) {
@@ -77,8 +85,9 @@ function getUserScopedRateLimitKey(req) {
 
 function getResetScopedRateLimitKey(req) {
   const ipKey = ipKeyGenerator(req.ip || '');
-  const code = req.params?.code || '';
-  return code ? `${ipKey}:reset:${code}` : ipKey;
+  const rawCode = typeof req.params?.code === 'string' ? req.params.code : '';
+  const limitedCode = rawCode.slice(0, MAX_CODE_LENGTH_FOR_KEY);
+  return limitedCode ? `${ipKey}:reset:${hashRateLimitFragment(limitedCode)}` : ipKey;
 }
 
 function createRedirectRateLimiter({ windowMs, limit, keyGenerator, redirectTo, message = AUTH_RATE_LIMIT_MESSAGE }) {
