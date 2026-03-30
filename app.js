@@ -3,6 +3,7 @@ const session = require('express-session');
 const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
+const fs = require('fs');
 const path = require('path');
 const packageJson = require('./package.json');
 const { getWeekNumber } = require('./weekNumber');
@@ -112,6 +113,50 @@ function normalizeShortCommitSha(value) {
   return match ? match[0].slice(0, 7).toLowerCase() : null;
 }
 
+function normalizeIsoTimestamp(value) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const parsed = new Date(trimmed);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+function getLatestFileTimestamp(filePaths) {
+  let latestTimestamp = null;
+
+  for (const filePath of filePaths) {
+    try {
+      const { mtimeMs } = fs.statSync(filePath);
+      if (Number.isFinite(mtimeMs) && (latestTimestamp === null || mtimeMs > latestTimestamp)) {
+        latestTimestamp = mtimeMs;
+      }
+    } catch {
+      // Best-effort fallback: skip missing files.
+    }
+  }
+
+  return latestTimestamp === null ? null : new Date(latestTimestamp).toISOString();
+}
+
+function resolveDeployTime() {
+  const explicitDeployTime = normalizeIsoTimestamp(process.env.DEPLOY_TIME);
+  if (explicitDeployTime) {
+    return explicitDeployTime;
+  }
+
+  return getLatestFileTimestamp([
+    path.join(__dirname, 'package-lock.json'),
+    path.join(__dirname, 'package.json'),
+    __filename
+  ]);
+}
+
 let db;
 const app = express();
 const isProduction = process.env.NODE_ENV === 'production';
@@ -119,7 +164,7 @@ const sessionSecret = process.env.SESSION_SECRET;
 const appVersion = process.env.APP_VERSION || packageJson.version;
 const fullCommitSha = process.env.GIT_COMMIT || process.env.RENDER_GIT_COMMIT || null;
 const shortCommitSha = normalizeShortCommitSha(process.env.GIT_COMMIT_SHORT) || normalizeShortCommitSha(fullCommitSha);
-const deployTime = process.env.DEPLOY_TIME || null;
+const deployTime = resolveDeployTime();
 
 if (isProduction) {
   if (!sessionSecret) {
