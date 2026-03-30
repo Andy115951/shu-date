@@ -59,7 +59,7 @@ const app = express();
 const isProduction = process.env.NODE_ENV === 'production';
 const sessionSecret = process.env.SESSION_SECRET;
 const appVersion = process.env.APP_VERSION || packageJson.version;
-const fullCommitSha = process.env.GIT_COMMIT || null;
+const fullCommitSha = process.env.GIT_COMMIT || process.env.RENDER_GIT_COMMIT || null;
 const shortCommitSha = normalizeShortCommitSha(process.env.GIT_COMMIT_SHORT) || normalizeShortCommitSha(fullCommitSha);
 const deployTime = process.env.DEPLOY_TIME || null;
 
