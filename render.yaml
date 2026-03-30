@@ -2,6 +2,6 @@ build:
   command: npm install
   timeout: 300
 run:
-  command: npm start
+  command: DEPLOY_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ) npm start
   type: web
   plan: free
