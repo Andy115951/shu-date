@@ -11,7 +11,7 @@
  * 加分项（总分上限120分）：
  * - 交友目的（purpose）相同：+4分
  * - 核心特质（core_traits）每相同一项：+2分（满分6分）
- * - 恋爱观念（14个维度）欧几里得距离：每项4分（共56分）
+ * - 恋爱观念（14个维度）整数距离：每项4分（共56分）
  * - 性格特质（partner_traits）每命中一项：+6分（满分30分）
  * - 兴趣爱好（interests）Jaccard × partner_interest 权重（满分12分）
  * - lovetype 最佳配对+12 / 良好配对+8 / 需要磨合-5
@@ -123,7 +123,7 @@ function scoreCoreTraits(myProfile, theirProfile) {
   return cappedMatches * 2;
 }
 
-// 14个维度欧几里得距离打分：每题4分（共56分）
+// 14个维度整数距离打分：每题4分（共56分）
 // 值域 -2 到 2，差值越大分数越低
 // 12项直接配对 + 2项交叉配对（drinking_habit vs partner_drinking，smoking_habit vs partner_smoking）
 function scoreLifestyleDimensions(myProfile, theirProfile) {
