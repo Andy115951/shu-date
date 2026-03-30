@@ -33,6 +33,8 @@ async function initDatabase() {
   // 确保新字段存在（升级时）
   await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_token TEXT');
   await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_expire TIMESTAMP');
+  await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token TEXT');
+  await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expire TIMESTAMP');
 
   // profiles 表
   await pool.query(`

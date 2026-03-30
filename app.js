@@ -316,7 +316,7 @@ app.post('/forgot', wrapAsync(async (req, res) => {
   const expireTime = new Date(Date.now() + 30 * 60 * 1000); // 30分钟有效
 
   await db.execute(
-    'UPDATE users SET login_code = $1, login_code_expire = $2 WHERE id = $3',
+    'UPDATE users SET reset_token = $1, reset_token_expire = $2 WHERE id = $3',
     [resetCode, expireTime.toISOString(), user.id]
   );
 
@@ -346,7 +346,7 @@ app.get('/reset/:code', wrapAsync(async (req, res) => {
   const resetCode = req.params.code;
 
   const user = await db.queryOne(
-    'SELECT id FROM users WHERE login_code = $1 AND login_code_expire > NOW()',
+    'SELECT id FROM users WHERE reset_token = $1 AND reset_token_expire > NOW()',
     [resetCode]
   );
 
@@ -386,7 +386,7 @@ app.post('/reset/:code', wrapAsync(async (req, res) => {
   }
 
   const user = await db.queryOne(
-    'SELECT id, nickname FROM users WHERE login_code = $1 AND login_code_expire > NOW()',
+    'SELECT id, nickname FROM users WHERE reset_token = $1 AND reset_token_expire > NOW()',
     [code]
   );
 
@@ -402,7 +402,7 @@ app.post('/reset/:code', wrapAsync(async (req, res) => {
   // 更新密码
   const passwordHash = await hashPassword(password);
   await db.execute(
-    'UPDATE users SET password_hash = $1, login_code = NULL, login_code_expire = NULL WHERE id = $2',
+    'UPDATE users SET password_hash = $1, reset_token = NULL, reset_token_expire = NULL WHERE id = $2',
     [passwordHash, user.id]
   );
 
@@ -1015,16 +1015,18 @@ app.get('/matches', isLoggedIn, wrapAsync(async (req, res) => {
   const weekNumber = getWeekNumber();
   const weeklyMatches = await db.query(`
     SELECT
+      m.week_number,
       m.score,
-      partner.id AS user_id,
-      partner.email,
-      partner.nickname,
-      partner.name,
-      p.my_grade,
-      p.gender,
-      p.campus,
-      p.interests,
-      p.lovetype_code
+      m.matched_at,
+      partner.id AS partner_id,
+      partner.email AS partner_email,
+      partner.nickname AS partner_nickname,
+      partner.name AS partner_name,
+      p.my_grade AS partner_grade,
+      p.gender AS partner_gender,
+      p.campus AS partner_campus,
+      p.interests AS partner_interests,
+      p.lovetype_code AS partner_lovetype_code
     FROM matches m
     JOIN users partner
       ON partner.id = CASE
@@ -1035,13 +1037,64 @@ app.get('/matches', isLoggedIn, wrapAsync(async (req, res) => {
     WHERE m.week_number = $2
       AND ($1 = m.user_id_1 OR $1 = m.user_id_2)
     ORDER BY m.matched_at DESC, m.id DESC
+    LIMIT 1
   `, [req.user.id, weekNumber]);
 
-  if (weeklyMatches.length > 1) {
-    console.error(`⚠️ 用户 ${req.user.id} 在第 ${weekNumber} 周存在 ${weeklyMatches.length} 条正式匹配记录，页面将展示最新一条`);
-  }
+  const weeklyMatch = weeklyMatches.length > 0 ? {
+    weekNumber: weeklyMatches[0].week_number,
+    score: weeklyMatches[0].score,
+    matchedAt: weeklyMatches[0].matched_at,
+    partner: {
+      id: weeklyMatches[0].partner_id,
+      email: weeklyMatches[0].partner_email,
+      nickname: weeklyMatches[0].partner_nickname || weeklyMatches[0].partner_name || weeklyMatches[0].partner_email?.split('@')[0],
+      my_grade: weeklyMatches[0].partner_grade,
+      gender: weeklyMatches[0].partner_gender,
+      campus: weeklyMatches[0].partner_campus,
+      interests: weeklyMatches[0].partner_interests,
+      lovetype_code: weeklyMatches[0].partner_lovetype_code
+    }
+  } : null;
 
-  const matches = weeklyMatches.length > 0 ? [weeklyMatches[0]] : [];
+  // 获取历史匹配记录
+  const historyRows = await db.query(`
+    SELECT
+      m.week_number,
+      m.score,
+      partner.id AS partner_id,
+      partner.nickname AS partner_nickname,
+      partner.name AS partner_name,
+      p.gender AS partner_gender,
+      p.my_grade AS partner_grade,
+      p.campus AS partner_campus,
+      p.interests AS partner_interests,
+      p.lovetype_code AS partner_lovetype_code
+    FROM matches m
+    JOIN users partner
+      ON partner.id = CASE
+        WHEN m.user_id_1 = $1 THEN m.user_id_2
+        ELSE m.user_id_1
+      END
+    LEFT JOIN profiles p ON p.user_id = partner.id
+    WHERE m.week_number < $2
+      AND ($1 = m.user_id_1 OR $1 = m.user_id_2)
+    ORDER BY m.week_number DESC, m.matched_at DESC
+    LIMIT 20
+  `, [req.user.id, weekNumber]);
+
+  const history = historyRows.map(h => ({
+    weekNumber: h.week_number,
+    score: h.score,
+    partner: {
+      id: h.partner_id,
+      nickname: h.partner_nickname || h.partner_name,
+      gender: h.partner_gender,
+      my_grade: h.partner_grade,
+      campus: h.partner_campus,
+      interests: h.partner_interests,
+      lovetype_code: h.partner_lovetype_code
+    }
+  }));
 
   res.render('matches', {
     title: '匹配结果',
@@ -1049,7 +1102,9 @@ app.get('/matches', isLoggedIn, wrapAsync(async (req, res) => {
     nickname: req.session.nickname,
     hasProfile: true,
     showPassword: true,
-    matches: matches,
+    weeklyMatch: weeklyMatch,
+    matches: weeklyMatch ? [weeklyMatch.partner] : [],
+    history: history,
     isAdmin: req.isAdmin,
     matchSource: 'weekly',
     weekNumber
