@@ -22,10 +22,10 @@ async function initDatabase() {
       nickname TEXT,
       name TEXT,
       verified INTEGER DEFAULT 0,
-      login_code TEXT,
-      login_code_expire TIMESTAMP,
       verification_token TEXT,
       verification_expire TIMESTAMP,
+      reset_token TEXT,
+      reset_token_expire TIMESTAMP,
       created_at TIMESTAMP DEFAULT NOW()
     )
   `);

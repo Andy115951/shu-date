@@ -169,10 +169,10 @@ shu-date/
 | nickname | TEXT | 昵称 |
 | password_hash | TEXT | 密码哈希（bcrypt） |
 | verified | INTEGER | 是否验证（0/1） |
-| verification_token | TEXT | 注册验证 token（一次性） |
-| verification_expire | TIMESTAMP | 验证 token 过期时间 |
-| login_code | TEXT | 登录验证码 |
-| login_code_expire | TIMESTAMP | 登录验证码过期时间（30分钟） |
+| verification_token | TEXT | 注册验证 token |
+| verification_expire | TIMESTAMP | 注册验证 token 过期时间 |
+| reset_token | TEXT | 密码重置 token |
+| reset_token_expire | TIMESTAMP | 密码重置 token 过期时间 |
 | created_at | TIMESTAMP | 创建时间 |
 
 #### profiles 表
