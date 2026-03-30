@@ -11,7 +11,7 @@
  * 相似度计算：
  * - 兴趣标签 Jaccard
  * - 生活方式相似度（作息、饮食、口味、约会、消费、烟酒）
- * - 恋爱观匹配度（沟通、同居、婚姻、相处模式）
+ * - 恋爱观匹配度（相处节奏、仪式感、相处模式、亲密关系时机、冲突处理）
  * - 兴趣爱好相似度偏好（partner_interest）
  *
  * 综合评分：
@@ -39,26 +39,24 @@ function jaccardSimilarity(set1, set2) {
   return intersection / set.size;
 }
 
-// 选项匹配度
-function optionMatch(myValue, theirValue) {
-  if (!myValue || !theirValue) return 0.5;
-  if (myValue === theirValue) return 1;
-  if (myValue === '不限') return 1;
-  if (theirValue === '不限') return 1;
-  return 0;
-}
-
-// 整数相似度（用于-2到2的评分）
-function intSimilarity(val1, val2) {
-  if (val1 === null || val1 === undefined || val2 === null || val2 === undefined) return 0.5;
-  const diff = Math.abs(val1 - val2);
-  return 1 - (diff / 4); // 最大差为4，转换为0-1
-}
-
 function parseNullableInt(value) {
   if (value === null || value === undefined || value === '') return null;
   const parsed = parseInt(value, 10);
   return Number.isNaN(parsed) ? null : parsed;
+}
+
+// 整数相似度（用于-2到2的评分）
+function intSimilarity(val1, val2) {
+  const normalizedVal1 = parseNullableInt(val1);
+  const normalizedVal2 = parseNullableInt(val2);
+
+  if (normalizedVal1 === null || normalizedVal2 === null) return 0.5;
+
+  const clampedVal1 = Math.max(-2, Math.min(2, normalizedVal1));
+  const clampedVal2 = Math.max(-2, Math.min(2, normalizedVal2));
+  const diff = Math.abs(clampedVal1 - clampedVal2);
+  const similarity = 1 - (Math.min(diff, 4) / 4); // 最大差为4，转换为0-1
+  return Math.max(0, Math.min(1, similarity));
 }
 
 function isHeightWithinRange(height, min, max) {
@@ -199,20 +197,22 @@ function calculateLifestyleScore(myProfile, theirProfile) {
 }
 
 function calculateLoveValueScore(myProfile, theirProfile) {
-  // 恋爱观念相关字段 - 使用选项匹配
-  const loveFields = [
-    'communication',      // 沟通频率
-    'cohabitation',      // 婚前同居
-    'marriage_plan',     // 婚姻规划
-    'relationship_style' // 相处模式
+  // 当前问卷中的恋爱观量表题
+  const loveScaleFields = [
+    'relationship_rhythm', // 相处节奏
+    'romantic_ritual',     // 仪式感
+    'relationship_style',  // 相处模式
+    'sexual_timing',       // 亲密关系时机
+    'conflict_style'       // 冲突处理
   ];
 
   let score = 0;
   let count = 0;
 
-  for (const field of loveFields) {
-    if (myProfile[field] && theirProfile[field]) {
-      score += optionMatch(myProfile[field], theirProfile[field]);
+  for (const field of loveScaleFields) {
+    if (myProfile[field] !== null && myProfile[field] !== undefined &&
+        theirProfile[field] !== null && theirProfile[field] !== undefined) {
+      score += intSimilarity(myProfile[field], theirProfile[field]);
       count++;
     }
   }
