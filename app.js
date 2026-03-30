@@ -172,6 +172,22 @@ function requireValidCsrf(req, res, next) {
   return res.redirect('/admin?msg=' + encodeURIComponent('请求无效，请刷新页面后重试') + '&type=error');
 }
 
+function renderSafely(res, status, view, locals = {}, fallbackMessage = '页面暂时不可用') {
+  res.status(status).render(view, locals, (renderErr, html) => {
+    if (!renderErr) {
+      return res.send(html);
+    }
+
+    console.error(`❌ 渲染 ${view} 失败:`, renderErr.message);
+    if (!res.headersSent) {
+      res
+        .status(status)
+        .type('text/plain; charset=utf-8')
+        .send(locals.message || fallbackMessage);
+    }
+  });
+}
+
 function regenerateSession(req) {
   return new Promise((resolve, reject) => {
     req.session.regenerate(error => {
@@ -1109,10 +1125,37 @@ async function start() {
 
 start().catch(console.error);
 
+app.use((req, res) => {
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({
+      success: false,
+      error: '接口不存在'
+    });
+  }
+
+  renderSafely(res, 404, '404', {
+    title: '页面不存在',
+    statusCode: 404,
+    message: '你访问的页面不存在，可能已被移动、删除，或者链接地址写错了。'
+  }, '页面不存在');
+});
+
 // 统一错误处理中间件
 app.use((err, req, res, next) => {
   console.error('❌ 服务器错误:', err.message);
-  res.status(500).send(`<html><body><h1>服务器错误</h1><p>${isProduction ? '服务器内部错误' : err.message}</p></body></html>`);
+
+  if (req.path.startsWith('/api/')) {
+    return res.status(500).json({
+      success: false,
+      error: isProduction ? '服务器内部错误' : err.message
+    });
+  }
+
+  renderSafely(res, 500, 'error', {
+    title: '服务器异常',
+    statusCode: 500,
+    message: isProduction ? '服务器开了点小差，请稍后再试。' : err.message
+  }, isProduction ? '服务器内部错误' : err.message);
 });
 
 module.exports = app;
