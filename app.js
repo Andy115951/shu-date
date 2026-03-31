@@ -16,7 +16,7 @@ const dbModule = require('./database');
 const BCRYPT_ROUNDS = 10;
 const SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const SESSION_PRUNE_INTERVAL_SECONDS = 15 * 60;
-const SESSION_TABLE_NAME = 'user_sessions';
+const SESSION_TABLE_NAME = dbModule.SESSION_TABLE_NAME;
 
 // 密码哈希函数 - 使用 bcrypt
 async function hashPassword(password) {
@@ -200,7 +200,7 @@ app.use(session({
     pruneSessionInterval: SESSION_PRUNE_INTERVAL_SECONDS,
     createTableIfMissing: false,
     errorLog(err) {
-      console.error('PostgreSQL session store 错误:', err.message);
+      console.error('PostgreSQL session store 错误:', err && err.stack ? err.stack : err);
     }
   }),
   secret: sessionSecret || 'xin_yousuo_shu_secret',
