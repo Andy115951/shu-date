@@ -1,24 +1,20 @@
 /**
- * 匹配服务 - 完整匹配算法（2026-03 新版问卷）
+ * 匹配服务 - 120分制匹配算法
  *
- * 过滤条件：
- * - 性别偏好
- * - 年龄范围（age_min, age_max）
- * - 校区接受度（accepted_campus）
- * - 身高偏好范围（preferred_height_min, preferred_height_max）
- * - 家乡偏好（hometown, preferred_hometown）
+ * 硬筛选条件（必须满足）：
+ * - 性别偏好互相对应
+ * - 年龄在对方要求范围内
+ * - 校区在对方接受范围内
+ * - 身高在对方要求范围内
+ * - 家乡（同家乡要求）
  *
- * 相似度计算：
- * - 兴趣标签 Jaccard
- * - 生活方式相似度（作息、饮食、口味、约会、消费、烟酒）
- * - 恋爱观匹配度（相处节奏、仪式感、相处模式、亲密关系时机、冲突处理）
- * - 兴趣爱好相似度偏好（partner_interest）
- *
- * 综合评分：
- * - interest: 0.25
- * - lifestyle: 0.35
- * - love_values: 0.25
- * - lovetype: 0.15
+ * 加分项（总分上限120分）：
+ * - 交友目的（purpose）相同：+4分
+ * - 核心特质（core_traits）每相同一项：+2分（满分6分）
+ * - 恋爱观念（14个维度）整数距离：每项4分（共56分）
+ * - 性格特质（partner_traits）每命中一项：+6分（满分30分）
+ * - 兴趣爱好（interests）Jaccard × partner_interest 权重（满分12分）
+ * - lovetype 最佳配对+12 / 良好配对+8 / 需要磨合-5
  */
 
 const dbModule = require('./database');
@@ -27,224 +23,244 @@ const { getWeekNumber } = require('./weekNumber');
 
 // ============ 工具函数 ============
 
-// Jaccard 相似度
-function jaccardSimilarity(set1, set2) {
-  if (!set1 || !set2) return 0;
-  const arr1 = set1.split(',').map(s => s.trim()).filter(s => s);
-  const arr2 = set2.split(',').map(s => s.trim()).filter(s => s);
-  if (arr1.length === 0 || arr2.length === 0) return 0;
-
-  const set = new Set([...arr1, ...arr2]);
-  const intersection = arr1.filter(x => arr2.includes(x)).length;
-  return intersection / set.size;
-}
-
 function parseNullableInt(value) {
   if (value === null || value === undefined || value === '') return null;
   const parsed = parseInt(value, 10);
   return Number.isNaN(parsed) ? null : parsed;
 }
 
-// 整数相似度（用于-2到2的评分）
-function intSimilarity(val1, val2) {
-  const normalizedVal1 = parseNullableInt(val1);
-  const normalizedVal2 = parseNullableInt(val2);
-
-  if (normalizedVal1 === null || normalizedVal2 === null) return 0.5;
-
-  const clampedVal1 = Math.max(-2, Math.min(2, normalizedVal1));
-  const clampedVal2 = Math.max(-2, Math.min(2, normalizedVal2));
-  const diff = Math.abs(clampedVal1 - clampedVal2);
-  const similarity = 1 - (Math.min(diff, 4) / 4); // 最大差为4，转换为0-1
-  return Math.max(0, Math.min(1, similarity));
+function clampInt(value, min, max) {
+  if (value === null) return null;
+  return Math.min(max, Math.max(min, value));
 }
 
-function isHeightWithinRange(height, min, max) {
-  const normalizedHeight = parseNullableInt(height);
-  const normalizedMin = parseNullableInt(min);
-  const normalizedMax = parseNullableInt(max);
-
-  // 缺少任一侧的实际身高或偏好上下限时，不因缺值直接过滤掉候选人。
-  if (normalizedHeight === null || normalizedMin === null || normalizedMax === null) {
-    return true;
-  }
-
-  const lowerBound = Math.min(normalizedMin, normalizedMax);
-  const upperBound = Math.max(normalizedMin, normalizedMax);
-  return normalizedHeight >= lowerBound && normalizedHeight <= upperBound;
+function isHeightWithinRange(myHeight, theirMin, theirMax) {
+  const h = parseNullableInt(myHeight);
+  const min = parseNullableInt(theirMin);
+  const max = parseNullableInt(theirMax);
+  if (h === null || min === null || max === null) return true;
+  const lower = Math.min(min, max);
+  const upper = Math.max(min, max);
+  return h >= lower && h <= upper;
 }
 
-// ============ 过滤阶段 ============
+function parseTagsField(value) {
+  if (!value) return [];
+  return value.split(',').map(s => s.trim()).filter(s => s);
+}
+
+// ============ 硬筛选阶段 ============
 
 function filterCandidates(myProfile, allProfiles) {
   return allProfiles.filter(p => {
-    // 1. 性别偏好过滤
+    // 1. 性别互相对应
     if (myProfile.preferred_gender && myProfile.preferred_gender !== '不限') {
       if (p.gender !== myProfile.preferred_gender) return false;
     }
-
-    // 对方也要接受我的性别
     if (p.preferred_gender && p.preferred_gender !== '不限') {
       if (myProfile.gender !== p.preferred_gender) return false;
     }
 
-    // 2. 年龄范围过滤（使用绝对年龄范围）
-    if (myProfile.age_min !== null && myProfile.age_max !== null) {
-      if (p.age) {
-        const theirAge = parseInt(p.age);
-        if (theirAge < myProfile.age_min || theirAge > myProfile.age_max) return false;
-      }
+    // 2. 年龄范围互相对应
+    if (myProfile.age_min !== null && myProfile.age_max !== null && p.age !== null) {
+      const theirAge = parseInt(p.age);
+      if (theirAge < myProfile.age_min || theirAge > myProfile.age_max) return false;
     }
-    // 对方也要在我的年龄范围内
-    if (p.age_min !== null && p.age_max !== null) {
-      if (myProfile.age) {
-        const myAge = parseInt(myProfile.age);
-        if (myAge < p.age_min || myAge > p.age_max) return false;
-      }
+    if (p.age_min !== null && p.age_max !== null && myProfile.age !== null) {
+      const myAge = parseInt(myProfile.age);
+      if (myAge < p.age_min || myAge > p.age_max) return false;
     }
 
-    // 3. 校区接受度过滤
+    // 3. 校区互相对应
     if (myProfile.accepted_campus && p.campus) {
-      const acceptedCampuses = myProfile.accepted_campus.split(',').map(s => s.trim());
-      if (!acceptedCampuses.includes(p.campus)) return false;
+      const accepted = myProfile.accepted_campus.split(',').map(s => s.trim());
+      if (!accepted.includes(p.campus)) return false;
     }
-    // 对方也要接受我的校区
     if (p.accepted_campus && myProfile.campus) {
-      const acceptedCampuses = p.accepted_campus.split(',').map(s => s.trim());
-      if (!acceptedCampuses.includes(myProfile.campus)) return false;
+      const accepted = p.accepted_campus.split(',').map(s => s.trim());
+      if (!accepted.includes(myProfile.campus)) return false;
     }
 
-    // 4. 身高偏好过滤
-    if (!isHeightWithinRange(
-      p.height_min,
-      myProfile.preferred_height_min,
-      myProfile.preferred_height_max
-    )) {
-      return false;
-    }
-    if (!isHeightWithinRange(
-      myProfile.height_min,
-      p.preferred_height_min,
-      p.preferred_height_max
-    )) {
-      return false;
-    }
+    // 4. 身高互相对应
+    if (!isHeightWithinRange(p.height, myProfile.preferred_height_min, myProfile.preferred_height_max)) return false;
+    if (!isHeightWithinRange(myProfile.height, p.preferred_height_min, p.preferred_height_max)) return false;
 
-    // 5. 家乡偏好过滤
-    if (myProfile.preferred_hometown && myProfile.preferred_hometown !== '不限') {
-      if (myProfile.preferred_hometown === '同家乡') {
-        if (p.hometown !== myProfile.hometown) return false;
-      }
+    // 5. 家乡（同家乡要求）
+    if (myProfile.preferred_hometown === '同家乡' && myProfile.hometown) {
+      if (p.hometown !== myProfile.hometown) return false;
     }
-    // 对方也要接受我的家乡
-    if (p.preferred_hometown && p.preferred_hometown !== '不限') {
-      if (p.preferred_hometown === '同家乡') {
-        if (myProfile.hometown !== p.hometown) return false;
-      }
+    if (p.preferred_hometown === '同家乡' && p.hometown) {
+      if (myProfile.hometown !== p.hometown) return false;
     }
 
     return true;
   });
 }
 
-// ============ 相似度计算 ============
+// ============ 加分项计算 ============
 
-// 考虑用户对伴侣兴趣相似的偏好
-function calculateInterestScoreWithPreference(myProfile, theirProfile) {
-  const baseScore = jaccardSimilarity(myProfile.interests, theirProfile.interests);
-  const preference = myProfile.partner_interest;
-
-  // 如果用户偏好相似（partner_interest > 0），提高匹配分数要求
-  // 如果用户偏好互补（partner_interest < 0），降低匹配分数要求
-  if (preference === null || preference === undefined) return baseScore;
-
-  if (preference >= 1) {
-    // 希望高度相似：加分
-    return Math.min(1, baseScore + 0.2);
-  } else if (preference <= -1) {
-    // 可以互补：保持原分数
-    return baseScore;
-  } else {
-    // 中立：轻微加分
-    return baseScore + 0.1;
-  }
+// purpose 相同：+4分
+function scorePurpose(myProfile, theirProfile) {
+  if (!myProfile.purpose || !theirProfile.purpose) return 0;
+  if (myProfile.purpose.trim() === theirProfile.purpose.trim()) return 4;
+  return 0;
 }
 
-function calculateLifestyleScore(myProfile, theirProfile) {
-  // 生活方式相关字段 - 使用整数相似度（-2到2）
-  const lifestyleFields = [
-    'sleep_pattern',    // 作息节律
-    'diet_preference',  // 饮食偏好
-    'spice_tolerance',  // 食辣能力
-    'date_preference',  // 周末约会
-    'spending_style',   // 消费风格
-    'smoking_habit',    // 吸烟习惯
-    'drinking_habit'   // 饮酒习惯
-  ];
+// core_traits 每相同一项：+2分（最多3项，满分6分）
+function scoreCoreTraits(myProfile, theirProfile) {
+  const myTraits = parseTagsField(myProfile.core_traits);
+  const theirTraits = parseTagsField(theirProfile.core_traits);
+  if (myTraits.length === 0 || theirTraits.length === 0) return 0;
 
-  let score = 0;
-  let count = 0;
+  // 按唯一值去重后计算交集数量
+  const mySet = new Set(myTraits);
+  const theirSet = new Set(theirTraits);
 
-  for (const field of lifestyleFields) {
-    if (myProfile[field] !== null && myProfile[field] !== undefined &&
-        theirProfile[field] !== null && theirProfile[field] !== undefined) {
-      score += intSimilarity(myProfile[field], theirProfile[field]);
-      count++;
+  let matchCount = 0;
+  for (const trait of mySet) {
+    if (theirSet.has(trait)) {
+      matchCount += 1;
     }
   }
 
-  return count > 0 ? score / count : 0.5;
+  // 最多按3项计分（每项2分，满分6分）
+  const cappedMatches = Math.min(matchCount, 3);
+  return cappedMatches * 2;
 }
 
-function calculateLoveValueScore(myProfile, theirProfile) {
-  // 当前问卷中的恋爱观量表题
-  const loveScaleFields = [
-    'relationship_rhythm', // 相处节奏
-    'romantic_ritual',     // 仪式感
-    'relationship_style',  // 相处模式
-    'sexual_timing',       // 亲密关系时机
-    'conflict_style'       // 冲突处理
+// 14个维度整数距离打分：每题4分（共56分）
+// 值域 -2 到 2，差值越大分数越低
+// 12项直接配对 + 2项交叉配对（drinking_habit vs partner_drinking，smoking_habit vs partner_smoking）
+function scoreLifestyleDimensions(myProfile, theirProfile) {
+  let totalScore = 0;
+
+  const directFields = [
+    'relationship_rhythm',  // 恋爱节奏
+    'romantic_ritual',      // 仪式感
+    'relationship_style',   // 相处模式
+    'sleep_pattern',        // 作息习惯
+    'diet_preference',      // 饮食偏好
+    'spice_tolerance',      // 辣度接受度
+    'date_preference',      // 约会偏好
+    'spending_style',       // 消费观念
+    'pet_attitude',          // 宠物态度
+    'sexual_timing',         // 性观念
+    'conflict_style',        // 应对冲突
+    'meeting_frequency'      // 见面频率
   ];
 
-  let score = 0;
-  let count = 0;
-
-  for (const field of loveScaleFields) {
-    if (myProfile[field] !== null && myProfile[field] !== undefined &&
-        theirProfile[field] !== null && theirProfile[field] !== undefined) {
-      score += intSimilarity(myProfile[field], theirProfile[field]);
-      count++;
-    }
+  for (const field of directFields) {
+    const myVal = parseNullableInt(myProfile[field]);
+    const theirVal = parseNullableInt(theirProfile[field]);
+    totalScore += (myVal === null || theirVal === null)
+      ? 2
+      : Math.max(0, 4 - Math.abs(myVal - theirVal));
   }
 
-  return count > 0 ? score / count : 0.5;
+  // 交叉配对：我的 drinking_habit vs 对方的 partner_drinking
+  const myDrinking = parseNullableInt(myProfile.drinking_habit);
+  const theirPartnerDrinking = parseNullableInt(theirProfile.partner_drinking);
+  totalScore += (myDrinking === null || theirPartnerDrinking === null)
+    ? 2
+    : Math.max(0, 4 - Math.abs(myDrinking - theirPartnerDrinking));
+
+  // 交叉配对：我的 smoking_habit vs 对方的 partner_smoking
+  const mySmoking = parseNullableInt(myProfile.smoking_habit);
+  const theirPartnerSmoking = parseNullableInt(theirProfile.partner_smoking);
+  totalScore += (mySmoking === null || theirPartnerSmoking === null)
+    ? 2
+    : Math.max(0, 4 - Math.abs(mySmoking - theirPartnerSmoking));
+
+  return totalScore; // 满分 56
+}
+
+// partner_traits 每命中一项：+6分（共30分）
+function scorePartnerTraits(myProfile, theirProfile) {
+  const myPreferredTraits = parseTagsField(myProfile.partner_traits);
+  const theirActualTraits = parseTagsField(theirProfile.my_traits);
+  if (myPreferredTraits.length === 0 || theirActualTraits.length === 0) return 0;
+  const matches = myPreferredTraits.filter(t => theirActualTraits.includes(t));
+  return Math.min(30, matches.length * 6);
+}
+
+// 兴趣爱好 标准 Jaccard × partner_interest 权重（满分12分）
+// Jaccard = |A ∩ B| / |A ∪ B|，权重范围 0~4
+function scoreInterests(myProfile, theirProfile) {
+  const myInterests = parseTagsField(myProfile.interests);
+  const theirInterests = parseTagsField(theirProfile.interests);
+
+  if (myInterests.length === 0) return 0;
+
+  const matched = myInterests.filter(i => theirInterests.includes(i));
+  const union = [...new Set([...myInterests, ...theirInterests])];
+  const jaccard = union.length > 0 ? matched.length / union.length : 0; // 标准 Jaccard: intersection / union
+
+  const partnerInterest = clampInt(parseNullableInt(myProfile.partner_interest), -2, 2);
+  const weight = (partnerInterest !== null ? partnerInterest + 2 : 2); // 缺值默认权重2，历史脏值裁到 0~4
+
+  const score = 3 * jaccard * weight;
+  return Math.min(12, score); // 满分12分
+}
+
+// lovetype 加分/扣分
+function scoreLovetype(myProfile, theirProfile) {
+  if (!myProfile.lovetype_code || !theirProfile.lovetype_code) return 0;
+
+  const label = lovetypeService.getCompatibilityLabel(myProfile.lovetype_code, theirProfile.lovetype_code);
+
+  if (label === '最佳配对') return 12;
+  if (label === '良好配对') return 8;
+  if (label === '需要磨合') return -5;
+  return 0;
 }
 
 // ============ 主匹配函数 ============
 
-function calculateMatchScore(myProfile, theirProfile) {
-  const interestScore = calculateInterestScoreWithPreference(myProfile, theirProfile);
-  const lifestyleScore = calculateLifestyleScore(myProfile, theirProfile);
-  const loveValueScore = calculateLoveValueScore(myProfile, theirProfile);
-  const lovetypeAdjustment = lovetypeService.getCompatibilityAdjustment(myProfile.lovetype_code, theirProfile.lovetype_code);
-
-  // 综合评分权重（根据新问卷调整）
-  const baseScore =
-    interestScore * 0.25 +
-    lifestyleScore * 0.35 +
-    loveValueScore * 0.25;
-
-  // LoveType兼容性和基础分结合
-  const finalScore = Math.max(0, Math.min(1, baseScore + lovetypeAdjustment));
-
-  return Math.round(finalScore * 100) / 100;
+// 调和平均：A对B的分数和B对A的分数，取双方共识度
+// 2*s1*s2 / (s1+s2)，若任一分为0则返回0
+function harmonicMean(scoreAB, scoreBA) {
+  if (scoreAB <= 0 || scoreBA <= 0) return 0;
+  return (2 * scoreAB * scoreBA) / (scoreAB + scoreBA);
 }
 
-/**
- * 为用户计算匹配列表
- * @param {number} userId - 用户ID
- * @returns {Array} 匹配结果列表
- */
+function calculateMatchScore(myProfile, theirProfile) {
+  let total = 0;
+
+  total += scorePurpose(myProfile, theirProfile);
+  total += scoreCoreTraits(myProfile, theirProfile);
+  total += scoreLifestyleDimensions(myProfile, theirProfile);
+  total += scorePartnerTraits(myProfile, theirProfile);
+  total += scoreInterests(myProfile, theirProfile);
+  total += scoreLovetype(myProfile, theirProfile);
+
+  // 上限 120 分
+  return Math.max(0, Math.min(120, total));
+}
+
+function calculateMatchDetails(myProfile, theirProfile) {
+  const purposeScore = scorePurpose(myProfile, theirProfile);
+  const coreTraitsScore = scoreCoreTraits(myProfile, theirProfile);
+  const lifestyleScore = scoreLifestyleDimensions(myProfile, theirProfile);
+  const partnerTraitsScore = scorePartnerTraits(myProfile, theirProfile);
+  const interestsScore = scoreInterests(myProfile, theirProfile);
+  const lovetypeScore = scoreLovetype(myProfile, theirProfile);
+  const total = purposeScore + coreTraitsScore + lifestyleScore + partnerTraitsScore + interestsScore + lovetypeScore;
+
+  return {
+    total: Math.max(0, Math.min(120, total)),
+    breakdown: {
+      purpose: purposeScore,
+      core_traits: coreTraitsScore,
+      lifestyle_dimensions: lifestyleScore,
+      partner_traits: partnerTraitsScore,
+      interests: interestsScore,
+      lovetype: lovetypeScore
+    }
+  };
+}
+
+// ============ 数据库查询接口 ============
+
 async function findMatches(userId) {
   const myUser = await dbModule.queryOne('SELECT * FROM users WHERE id = $1', [userId]);
   if (!myUser) return [];
@@ -252,7 +268,6 @@ async function findMatches(userId) {
   const myProfile = await dbModule.queryOne('SELECT * FROM profiles WHERE user_id = $1', [userId]);
   if (!myProfile) return [];
 
-  // 获取所有其他用户资料
   const allProfiles = await dbModule.query(`
     SELECT u.id, u.email, u.nickname, u.name, p.*
     FROM users u
@@ -262,14 +277,15 @@ async function findMatches(userId) {
 
   if (allProfiles.length === 0) return [];
 
-  // 过滤阶段
   const candidates = filterCandidates(myProfile, allProfiles);
-
   if (candidates.length === 0) return [];
 
-  // 计算每个候选人的匹配分数
   const scored = candidates.map(candidate => {
-    const score = calculateMatchScore(myProfile, candidate);
+    const scoreAB = calculateMatchScore(myProfile, candidate);
+    const scoreBA = calculateMatchScore(candidate, myProfile);
+    const score = harmonicMean(scoreAB, scoreBA);
+    const detailsA = calculateMatchDetails(myProfile, candidate);
+
     return {
       user_id: candidate.id,
       email: candidate.email,
@@ -278,46 +294,36 @@ async function findMatches(userId) {
       my_grade: candidate.my_grade,
       gender: candidate.gender,
       age: candidate.age,
-      height_min: candidate.height_min,
+      height: candidate.height,
       campus: candidate.campus,
       hometown: candidate.hometown,
       interests: candidate.interests,
       lovetype_code: candidate.lovetype_code,
-      lovetype_match_label: lovetypeService.getCompatibilityLabel(myProfile.lovetype_code, candidate.lovetype_code),
-      score: score
+      lovetype_label: lovetypeService.getCompatibilityLabel(myProfile.lovetype_code, candidate.lovetype_code),
+      score: Math.round((score / 120) * 100) / 100,
+      score_ab: scoreAB,
+      score_ba: scoreBA,
+      score_breakdown: detailsA.breakdown
     };
   });
 
-  // 按分数降序排序
   scored.sort((a, b) => b.score - a.score);
-
   return scored;
 }
 
-/**
- * 获取前N名匹配
- * @param {number} userId - 用户ID
- * @param {number} topN - 返回数量，默认5
- * @returns {Array}
- */
 async function getTopMatches(userId, topN = 5) {
   const matches = await findMatches(userId);
   return matches.slice(0, topN);
 }
 
-/**
- * 保存本周匹配结果到数据库
- */
 async function saveWeeklyMatches() {
   const weekNumber = getWeekNumber();
 
-  // 检查本周是否已匹配
   const existing = await dbModule.queryOne('SELECT id FROM matches WHERE week_number = $1', [weekNumber]);
   if (existing) {
     return { success: false, message: '本周已执行匹配' };
   }
 
-  // 获取所有已填写问卷的用户
   const users = await dbModule.query(`
     SELECT u.id, u.email, u.nickname, u.name, p.my_grade
     FROM users u
@@ -329,7 +335,6 @@ async function saveWeeklyMatches() {
     return { success: false, message: '用户数量不足' };
   }
 
-  // 为每个用户找出最佳匹配（贪婪算法）
   const matched = new Set();
   const results = [];
 
@@ -372,5 +377,7 @@ module.exports = {
   findMatches,
   getTopMatches,
   saveWeeklyMatches,
-  calculateMatchScore
+  calculateMatchScore,
+  calculateMatchDetails,
+  filterCandidates
 };
