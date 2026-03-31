@@ -194,7 +194,6 @@ app.use(session({
 app.use((req, res, next) => {
   res.locals.isDev = !isProduction;
   res.locals.isProduction = isProduction;
-  res.locals.port = process.env.PORT || 3000;
   next();
 });
 
