@@ -191,6 +191,13 @@ app.use(session({
   proxy: isProduction
 }));
 
+app.use((req, res, next) => {
+  res.locals.isDev = !isProduction;
+  res.locals.isProduction = isProduction;
+  res.locals.port = process.env.PORT || 3000;
+  next();
+});
+
 // 登录中间件
 async function isLoggedIn(req, res, next) {
   try {
