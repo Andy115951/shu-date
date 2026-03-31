@@ -29,6 +29,11 @@ function parseNullableInt(value) {
   return Number.isNaN(parsed) ? null : parsed;
 }
 
+function clampInt(value, min, max) {
+  if (value === null) return null;
+  return Math.min(max, Math.max(min, value));
+}
+
 function isHeightWithinRange(myHeight, theirMin, theirMax) {
   const h = parseNullableInt(myHeight);
   const min = parseNullableInt(theirMin);
@@ -190,8 +195,8 @@ function scoreInterests(myProfile, theirProfile) {
   const union = [...new Set([...myInterests, ...theirInterests])];
   const jaccard = union.length > 0 ? matched.length / union.length : 0; // 标准 Jaccard: intersection / union
 
-  const partnerInterest = parseNullableInt(myProfile.partner_interest);
-  const weight = (partnerInterest !== null ? partnerInterest + 2 : 2); // 缺值默认权重2
+  const partnerInterest = clampInt(parseNullableInt(myProfile.partner_interest), -2, 2);
+  const weight = (partnerInterest !== null ? partnerInterest + 2 : 2); // 缺值默认权重2，历史脏值裁到 0~4
 
   const score = 3 * jaccard * weight;
   return Math.min(12, score); // 满分12分

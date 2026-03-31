@@ -1,6 +1,6 @@
 # 心有所SHU - 内测版
 
-上海大学校园恋爱匹配平台 V0.1.2
+上海大学校园恋爱匹配平台 V0.2.0
 
 ## 访问地址
 
@@ -129,7 +129,7 @@ ADMIN_EMAILS=admin@shu.edu.cn
 
 ```json
 {
-  "version": "0.1.2",
+  "version": "0.2.0",
   "commit": "1b106c8",
   "deployedAt": "2026-03-29T00:00:00Z"
 }
