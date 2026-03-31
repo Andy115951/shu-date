@@ -1,6 +1,6 @@
 # 心有所SHU - 内测版
 
-上海大学校园恋爱匹配平台 V0.1.2
+上海大学校园恋爱匹配平台 V0.2.0
 
 ## 访问地址
 
@@ -106,6 +106,7 @@
 DATABASE_URL=postgresql://<user>:<password>@<host>:5432/<database>
 SESSION_SECRET=replace-this-in-production
 BASE_URL=http://localhost:3000
+ADMIN_EMAILS=admin@shu.edu.cn
 ```
 
 3. 启动服务：`npm start`
@@ -116,7 +117,8 @@ BASE_URL=http://localhost:3000
 
 1. **数据库**: 使用 Supabase PostgreSQL，通过 `DATABASE_URL` 连接
 2. **邮件**: 当前登录邮件与匹配通知均通过 Resend 发送
-3. **休眠**: Render免费版30分钟无访问会休眠
+3. **管理员权限**: 通过 `ADMIN_EMAILS` 配置管理员邮箱白名单
+4. **休眠**: Render免费版30分钟无访问会休眠
 
 ---
 
@@ -128,7 +130,7 @@ BASE_URL=http://localhost:3000
 
 ```json
 {
-  "version": "0.1.2",
+  "version": "0.2.0",
   "commit": "1b106c8",
   "deployedAt": "2026-03-29T00:00:00Z"
 }
