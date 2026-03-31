@@ -148,6 +148,15 @@ await pool.query(`
   )
 `);
 
+await pool.query(`
+  CREATE TABLE IF NOT EXISTS user_sessions (
+    sid VARCHAR PRIMARY KEY,
+    sess JSON NOT NULL,
+    expire TIMESTAMP(6) NOT NULL
+  )
+`);
+await pool.query('CREATE INDEX IF NOT EXISTS idx_user_sessions_expire ON user_sessions (expire)');
+
   isInitialized = true;
   console.log('✅ Supabase PostgreSQL 数据库初始化完成');
   return pool;
