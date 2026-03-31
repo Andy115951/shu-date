@@ -118,7 +118,8 @@ ADMIN_EMAILS=admin@shu.edu.cn
 1. **数据库**: 使用 Supabase PostgreSQL，通过 `DATABASE_URL` 连接
 2. **邮件**: 当前登录邮件与匹配通知均通过 Resend 发送
 3. **管理员权限**: 通过 `ADMIN_EMAILS` 配置管理员邮箱白名单
-4. **休眠**: Render免费版30分钟无访问会休眠
+4. **Session**: 会话已持久化到 PostgreSQL，默认有效期 7 天，并会定期清理过期记录
+5. **休眠**: Render免费版30分钟无访问会休眠
 
 ---
 

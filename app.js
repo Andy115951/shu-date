@@ -1,5 +1,6 @@
 const express = require('express');
 const session = require('express-session');
+const PgSession = require('connect-pg-simple')(session);
 const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
@@ -9,9 +10,13 @@ const packageJson = require('./package.json');
 const { getWeekNumber } = require('./weekNumber');
 require('dotenv').config();
 const lovetypeService = require('./lovetypeService');
+const dbModule = require('./database');
 
 // bcrypt 工作因子
 const BCRYPT_ROUNDS = 10;
+const SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const SESSION_PRUNE_INTERVAL_SECONDS = 15 * 60;
+const SESSION_TABLE_NAME = dbModule.SESSION_TABLE_NAME;
 
 // 密码哈希函数 - 使用 bcrypt
 async function hashPassword(password) {
@@ -157,7 +162,7 @@ function resolveDeployTime() {
   ]);
 }
 
-let db;
+let db = dbModule;
 const app = express();
 const isProduction = process.env.NODE_ENV === 'production';
 const sessionSecret = process.env.SESSION_SECRET;
@@ -188,6 +193,16 @@ app.set('views', path.join(__dirname, 'views'));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(session({
+  store: new PgSession({
+    pool: dbModule.getPool(),
+    tableName: SESSION_TABLE_NAME,
+    ttl: Math.floor(SESSION_MAX_AGE_MS / 1000),
+    pruneSessionInterval: SESSION_PRUNE_INTERVAL_SECONDS,
+    createTableIfMissing: false,
+    errorLog(err) {
+      console.error('PostgreSQL session store 错误:', err && err.stack ? err.stack : err);
+    }
+  }),
   secret: sessionSecret || 'xin_yousuo_shu_secret',
   resave: false,
   saveUninitialized: false,
@@ -195,7 +210,7 @@ app.use(session({
     httpOnly: true,
     sameSite: 'lax',
     secure: isProduction,
-    maxAge: 7 * 24 * 60 * 60 * 1000
+    maxAge: SESSION_MAX_AGE_MS
   },
   proxy: isProduction
 }));
@@ -1378,7 +1393,6 @@ async function runWeeklyMatch() {
 
 // 初始化数据库并启动
 async function start() {
-  const dbModule = require('./database');
   db = dbModule;
   await db.initDatabase();
 

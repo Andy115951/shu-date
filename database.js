@@ -1,4 +1,6 @@
 const { Pool } = require('pg');
+const SESSION_TABLE_NAME = 'user_sessions';
+const SESSION_EXPIRE_INDEX_NAME = 'idx_user_sessions_expire';
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -148,6 +150,15 @@ await pool.query(`
   )
 `);
 
+await pool.query(`
+  CREATE TABLE IF NOT EXISTS ${SESSION_TABLE_NAME} (
+    sid VARCHAR PRIMARY KEY,
+    sess JSON NOT NULL,
+    expire TIMESTAMP(6) NOT NULL
+  )
+`);
+await pool.query(`CREATE INDEX IF NOT EXISTS ${SESSION_EXPIRE_INDEX_NAME} ON ${SESSION_TABLE_NAME} (expire)`);
+
   isInitialized = true;
   console.log('✅ Supabase PostgreSQL 数据库初始化完成');
   return pool;
@@ -172,6 +183,7 @@ async function execute(sql, params = []) {
 }
 
 module.exports = {
+  SESSION_TABLE_NAME,
   initDatabase,
   query,
   queryOne,

@@ -238,6 +238,15 @@ shu-date/
 | matched_at | TIMESTAMP | 匹配时间 |
 | week_number | INTEGER | 周数 |
 
+#### user_sessions 表
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| sid | VARCHAR | Session ID（主键） |
+| sess | JSON | Session 内容 |
+| expire | TIMESTAMP | 过期时间 |
+
+> Session 通过 PostgreSQL 持久化，默认 TTL 为 7 天；应用会定期清理过期记录，进程重启后不会回退到默认 MemoryStore 行为。
+
 ---
 
 ## 四、API 路由
