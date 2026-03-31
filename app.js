@@ -1008,15 +1008,16 @@ app.post('/settings/password', isLoggedIn, passwordChangeRateLimiterForSettings,
 }));
 
 // 注销账号页面
-app.get('/settings/delete', isLoggedIn, (req, res) => {
+app.get('/settings/delete', isLoggedIn, ensureCsrfToken, (req, res) => {
   res.render('delete-account', {
     nickname: req.session.nickname,
-    hasProfile: true
+    hasProfile: true,
+    csrfToken: req.csrfToken
   });
 });
 
 // 注销账号
-app.post('/settings/delete', isLoggedIn, wrapAsync(async (req, res) => {
+app.post('/settings/delete', isLoggedIn, requireValidCsrf, wrapAsync(async (req, res) => {
   const { email, password } = req.body;
 
   if (!email || !password) {
