@@ -1031,8 +1031,9 @@ app.post('/settings/delete', isLoggedIn, wrapAsync(async (req, res) => {
   // 获取当前用户
   const user = await db.queryOne('SELECT id, email, password_hash FROM users WHERE id = $1', [req.session.userId]);
 
-  // 校验邮箱
-  if (user.email !== email) {
+  // 校验邮箱（对输入 email 做 normalize 后再比较）
+  const normalizedEmail = normalizeEmail(email);
+  if (user.email !== normalizedEmail) {
     return res.render('delete-account', {
       nickname: req.session.nickname,
       hasProfile: true,
