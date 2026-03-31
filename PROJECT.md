@@ -258,8 +258,11 @@ shu-date/
 | GET | /profile | 问卷页 | 已登录 |
 | POST | /survey/submit | 提交问卷 | 已登录 |
 | POST | /profile | 更新问卷 | 已登录 |
-| GET | /profile/password | 修改密码页 | 已登录 |
-| POST | /profile/password | 修改密码 | 已登录 |
+| GET | /settings | 账户设置页 | 已登录 |
+| GET | /settings/password | 修改密码页 | 已登录 |
+| POST | /settings/password | 修改密码 | 已登录 |
+| GET | /settings/delete | 注销账号页 | 已登录 |
+| POST | /settings/delete | 注销账号 | 已登录 |
 | GET | /matches | 查看本周正式匹配结果 | 已登录 |
 | GET | /api/matches | 获取实时推荐列表 | 已登录 |
 | GET | /api/match/top | 获取前 5 名实时推荐 | 已登录 |
@@ -401,12 +404,21 @@ http://localhost:3000
 
 ## 八、更新日志
 
+### 2026-03-30 - V0.2.0
+- 更新部分问卷题目与顺序
+- 重构匹配度评分系统
+- 用ADMIN_EMAILS代替管理员硬编码邮箱
+- 为认证和管理写入口增加基础限流
+- 补齐稳定的 HTML 版 404/500 错误页与 API 版 JSON 兜底响应
+- 收拢正式匹配与实时推荐的边界
+- 优化移动端适配
+
 ### 2026-03-28 - V0.1.2
 - 新增密码注册功能（邮箱+昵称+密码）
 - 新增邮箱验证流程（验证邮件+验证链接）
 - 新增忘记密码/重置密码功能
 - 新增统一导航栏 navbar.ejs（下拉菜单）
-- 新增修改密码功能（/profile/password）
+- 新增修改密码功能
 - 代码优化：database.js 简化为直接使用 pg pool
 - 移除重复的旧路由代码
 - 新增开发者工具面板（右上角🔧按钮）
