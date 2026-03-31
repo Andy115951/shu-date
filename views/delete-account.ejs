@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>注销账号 - 心有所SHU</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <%- include('partials/head-icons') %>
+</head>
+<body>
+  <%- include('partials/navbar') %>
+
+  <div class="container" style="max-width: 600px; padding-top: 40px;">
+    <div class="card" style="background: #f8f9fa; padding: 20px;">
+      <h2 style="margin-bottom: 20px;">🗑️ 注销账号确认</h2>
+
+      <div style="background: #fff3cd; border: 1px solid #ffc107; border-radius: 8px; padding: 16px; margin-bottom: 20px;">
+        <p style="margin: 0; color: #856404; font-size: 0.9rem;">
+          <strong>⚠️ 注意：</strong>注销后，您的恋爱人格测试结果、匹配记录以及所有个人资料将被永久删除，无法恢复。
+        </p>
+      </div>
+
+      <% if (typeof deleteMessage !== 'undefined' && deleteMessage) { %>
+        <div class="alert alert-<%= deleteMessageType || 'error' %>" style="margin-bottom: 16px;">
+          <%= deleteMessage %>
+        </div>
+      <% } %>
+
+      <form action="/settings/delete" method="POST">
+        <div style="margin-bottom: 16px;">
+          <label style="display: block; margin-bottom: 6px; font-size: 0.9rem;">邮箱</label>
+          <input type="email" name="email" placeholder="请输入您的邮箱" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box;">
+        </div>
+
+        <div style="margin-bottom: 20px;">
+          <label style="display: block; margin-bottom: 6px; font-size: 0.9rem;">密码</label>
+          <input type="password" name="password" placeholder="请输入您的密码" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box;">
+        </div>
+
+        <button type="submit" class="btn btn-danger">确认注销账号</button>
+      </form>
+
+      <div style="margin-top: 16px; text-align: center;">
+        <a href="/settings" style="color: var(--primary); font-size: 0.85rem;">← 返回设置</a>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

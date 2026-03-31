@@ -258,8 +258,11 @@ shu-date/
 | GET | /profile | 问卷页 | 已登录 |
 | POST | /survey/submit | 提交问卷 | 已登录 |
 | POST | /profile | 更新问卷 | 已登录 |
-| GET | /profile/password | 修改密码页 | 已登录 |
-| POST | /profile/password | 修改密码 | 已登录 |
+| GET | /settings | 账户设置页 | 已登录 |
+| GET | /settings/password | 修改密码页 | 已登录 |
+| POST | /settings/password | 修改密码 | 已登录 |
+| GET | /settings/delete | 注销账号页 | 已登录 |
+| POST | /settings/delete | 注销账号 | 已登录 |
 | GET | /matches | 查看本周正式匹配结果 | 已登录 |
 | GET | /api/matches | 获取实时推荐列表 | 已登录 |
 | GET | /api/match/top | 获取前 5 名实时推荐 | 已登录 |
