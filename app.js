@@ -906,31 +906,37 @@ app.get('/profile', isLoggedIn, wrapAsync(async (req, res) => {
   res.render('profile', model);
 }));
 // 账户设置
-app.get('/settings', isLoggedIn, (req, res) => {
+app.get('/settings', isLoggedIn, wrapAsync(async (req, res) => {
+  const profile = await db.queryOne('SELECT * FROM profiles WHERE user_id = $1', [req.user.id]);
   res.render('settings', {
+    user: req.user,
     nickname: req.session.nickname,
-    hasProfile: true
+    hasProfile: !!profile
   });
-});
+}));
 
 // 修改密码页面
-app.get('/settings/password', isLoggedIn, (req, res) => {
+app.get('/settings/password', isLoggedIn, wrapAsync(async (req, res) => {
+  const profile = await db.queryOne('SELECT * FROM profiles WHERE user_id = $1', [req.user.id]);
   res.render('password', {
+    user: req.user,
     nickname: req.session.nickname,
-    hasProfile: true,
+    hasProfile: !!profile,
     passwordMessage: req.query.msg || '',
     passwordMessageType: req.query.type || ''
   });
-});
+}));
 
 // 修改密码
 app.post('/settings/password', isLoggedIn, passwordChangeRateLimiter, wrapAsync(async (req, res) => {
   const { currentPassword, newPassword, confirmPassword } = req.body;
+  const profile = await db.queryOne('SELECT * FROM profiles WHERE user_id = $1', [req.session.userId]);
 
   if (!currentPassword || !newPassword || !confirmPassword) {
     return res.render('password', {
+      user: req.user,
       nickname: req.session.nickname,
-      hasProfile: true,
+      hasProfile: !!profile,
       passwordMessage: '请填写所有字段',
       passwordMessageType: 'error'
     });
@@ -938,8 +944,9 @@ app.post('/settings/password', isLoggedIn, passwordChangeRateLimiter, wrapAsync(
 
   if (newPassword.length < 6) {
     return res.render('password', {
+      user: req.user,
       nickname: req.session.nickname,
-      hasProfile: true,
+      hasProfile: !!profile,
       passwordMessage: '新密码长度至少6位',
       passwordMessageType: 'error'
     });
@@ -947,8 +954,9 @@ app.post('/settings/password', isLoggedIn, passwordChangeRateLimiter, wrapAsync(
 
   if (newPassword !== confirmPassword) {
     return res.render('password', {
+      user: req.user,
       nickname: req.session.nickname,
-      hasProfile: true,
+      hasProfile: !!profile,
       passwordMessage: '两次输入的密码不一致',
       passwordMessageType: 'error'
     });
@@ -962,8 +970,9 @@ app.post('/settings/password', isLoggedIn, passwordChangeRateLimiter, wrapAsync(
     const currentPasswordValid = await verifyPassword(currentPassword, user.password_hash, db, req.session.userId);
     if (!currentPasswordValid) {
       return res.render('password', {
+        user: req.user,
         nickname: req.session.nickname,
-        hasProfile: true,
+        hasProfile: !!profile,
         passwordMessage: '当前密码错误',
         passwordMessageType: 'error'
       });
@@ -978,11 +987,11 @@ app.post('/settings/password', isLoggedIn, passwordChangeRateLimiter, wrapAsync(
   );
 
   if (result && result.changes === 1) {
-    return res.redirect('/settings?msg=密码修改成功&type=success');
-  } else {
+    return res.redirect('/settings/password?msg=密码修改成功&type=success');  } else {
     return res.render('password', {
+      user: req.user,
       nickname: req.session.nickname,
-      hasProfile: true,
+      hasProfile: !!profile,
       passwordMessage: '密码修改失败，请重试',
       passwordMessageType: 'error'
     });
@@ -990,21 +999,25 @@ app.post('/settings/password', isLoggedIn, passwordChangeRateLimiter, wrapAsync(
 }));
 
 // 注销账号页面
-app.get('/settings/delete', isLoggedIn, (req, res) => {
+app.get('/settings/delete', isLoggedIn, wrapAsync(async (req, res) => {
+  const profile = await db.queryOne('SELECT * FROM profiles WHERE user_id = $1', [req.user.id]);
   res.render('delete-account', {
+    user: req.user,
     nickname: req.session.nickname,
-    hasProfile: true
+    hasProfile: !!profile
   });
-});
+}));
 
 // 注销账号
 app.post('/settings/delete', isLoggedIn, wrapAsync(async (req, res) => {
   const { email, password } = req.body;
+  const profile = await db.queryOne('SELECT * FROM profiles WHERE user_id = $1', [req.session.userId]);
 
   if (!email || !password) {
     return res.render('delete-account', {
+      user: req.user,
       nickname: req.session.nickname,
-      hasProfile: true,
+      hasProfile: !!profile,
       deleteMessage: '请填写邮箱和密码',
       deleteMessageType: 'error'
     });
@@ -1016,8 +1029,9 @@ app.post('/settings/delete', isLoggedIn, wrapAsync(async (req, res) => {
   // 校验邮箱
   if (user.email !== email) {
     return res.render('delete-account', {
+      user: req.user,
       nickname: req.session.nickname,
-      hasProfile: true,
+      hasProfile: !!profile,
       deleteMessage: '邮箱或密码错误',
       deleteMessageType: 'error'
     });
@@ -1028,8 +1042,9 @@ app.post('/settings/delete', isLoggedIn, wrapAsync(async (req, res) => {
     const passwordValid = await verifyPassword(password, user.password_hash, db, req.session.userId);
     if (!passwordValid) {
       return res.render('delete-account', {
+        user: req.user,
         nickname: req.session.nickname,
-        hasProfile: true,
+        hasProfile: !!profile,
         deleteMessage: '邮箱或密码错误',
         deleteMessageType: 'error'
       });
