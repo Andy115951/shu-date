@@ -604,7 +604,7 @@ tr:hover td {
 
   /* 移动端下拉菜单里的链接要显示 */
   .dropdown-menu a {
-    display: block !important;
+    display: block;
   }
 
   /* 移动端下拉菜单样式 */
