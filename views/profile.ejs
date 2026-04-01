@@ -550,19 +550,19 @@
       <div class="form-group">
         <label>(b). 我希望匹配到的对象年龄范围：</label>
         <div class="range-container">
-          <input type="range" class="range-slider" name="age_min" id="ageMin" min="16" max="40" value="<%= profile && profile.age_min ? profile.age_min : 18 %>" oninput="updateAgeRangeDisplay()">
+          <input type="range" class="range-slider" name="age_min" id="ageMin" min="16" max="30" value="<%= profile && profile.age_min ? profile.age_min : 18 %>" oninput="updateAgeRangeDisplay()">
           <div class="range-labels">
             <span>16岁</span>
-            <span>25岁</span>
-            <span>40岁</span>
+            <span>23岁</span>
+            <span>30岁</span>
           </div>
           <div class="range-value" id="ageMinValue">最小 <%= profile && profile.age_min ? profile.age_min : 18 %> 岁</div>
 
-          <input type="range" class="range-slider" name="age_max" id="ageMax" min="16" max="45" value="<%= profile && profile.age_max ? profile.age_max : 28 %>" oninput="updateAgeRangeDisplay()">
+          <input type="range" class="range-slider" name="age_max" id="ageMax" min="16" max="30" value="<%= profile && profile.age_max ? profile.age_max : 28 %>" oninput="updateAgeRangeDisplay()">
           <div class="range-labels">
             <span>16岁</span>
-            <span>25岁</span>
-            <span>40岁</span>
+            <span>23岁</span>
+            <span>30岁</span>
           </div>
           <div class="range-value" id="ageMaxValue">最大 <%= profile && profile.age_max ? profile.age_max : 28 %> 岁</div>
         </div>
@@ -598,11 +598,11 @@
       <div class="form-group">
         <label>6(a). 我的身高（cm）：</label>
         <div class="range-container">
-          <input type="range" class="range-slider" name="height" id="myHeight" min="140" max="200" value="<%= profile && profile.height ? profile.height : 170 %>" oninput="updateMyHeightDisplay()">
+          <input type="range" class="range-slider" name="height" id="myHeight" min="140" max="210" value="<%= profile && profile.height ? profile.height : 170 %>" oninput="updateMyHeightDisplay()">
           <div class="range-labels">
             <span>140cm</span>
-            <span>170cm</span>
-            <span>200cm</span>
+            <span>175cm</span>
+            <span>210cm</span>
           </div>
           <div class="range-value" id="myHeightValue"><%= profile && profile.height ? profile.height : 170 %> cm</div>
         </div>
@@ -611,11 +611,11 @@
       <div class="form-group">
         <label>(b). 我对匹配对象的身高偏好（cm）：</label>
         <div class="range-container">
-          <input type="range" class="range-slider" name="preferred_height_min" id="preferredHeightMin" min="140" max="200" value="<%= profile && profile.preferred_height_min ? profile.preferred_height_min : 160 %>" oninput="updatePreferredHeightDisplay()">
+          <input type="range" class="range-slider" name="preferred_height_min" id="preferredHeightMin" min="140" max="210" value="<%= profile && profile.preferred_height_min ? profile.preferred_height_min : 160 %>" oninput="updatePreferredHeightDisplay()">
           <div class="range-labels">
             <span>140cm</span>
-            <span>170cm</span>
-            <span>200cm</span>
+            <span>175cm</span>
+            <span>210cm</span>
           </div>
           <div class="range-value" id="preferredHeightMinValue">最低 <%= profile && profile.preferred_height_min ? profile.preferred_height_min : 160 %> cm</div>
 
@@ -1549,72 +1549,37 @@
 </style>
 
 <script>
-// 范围选择器互斥逻辑
 
-// 我的年龄
+// 滑块选择函数
+function calcPercent(val, min, max) {
+  return (val - min) / (max - min) * 100;
+}
+
+function setSliderBg(slider, percent) {
+  slider.style.background = `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${percent}%, #d1d5db ${percent}%, #d1d5db 100%)`;
+}
+
 function updateMyAgeDisplay() {
-  const slider = document.getElementById('myAge');
-  document.getElementById('myAgeValue').textContent = slider.value + ' 岁';
+  const s = document.getElementById('myAge');
+  setSliderBg(s, calcPercent(+s.value, 16, 30));
+  document.getElementById('myAgeValue').textContent = s.value + ' 岁';
 }
 
-// 双滑块年龄范围选择
-function updateAgeDualRange() {
-  const minSlider = document.getElementById('ageMin');
-  const maxSlider = document.getElementById('ageMax');
-  const minVal = parseInt(minSlider.value);
-  const maxVal = parseInt(maxSlider.value);
-
-  // 确保最小值不超过最大值
-  if (minVal > maxVal) {
-    minSlider.value = maxVal;
-  }
-
-  // 更新高亮区域
-  const highlight = document.getElementById('ageRangeHighlight');
-  const minPercent = ((minVal - 16) / (40 - 16)) * 100;
-  const maxPercent = ((maxVal - 16) / (40 - 16)) * 100;
-  highlight.style.left = minPercent + '%';
-  highlight.style.width = (maxPercent - minPercent) + '%';
-
-  // 更新显示值
-  document.getElementById('ageMinDisplay').textContent = minSlider.value;
-  document.getElementById('ageMaxDisplay').textContent = maxSlider.value;
-}
-
-// 双数轴年龄范围选择
 function updateAgeRangeDisplay() {
-  const minSlider = document.getElementById('ageMin');
-  const maxSlider = document.getElementById('ageMax');
-  const minVal = parseInt(minSlider.value);
-  const maxVal = parseInt(maxSlider.value);
-
-  // 确保最小值不超过最大值
-  if (minVal > maxVal) {
-    minSlider.value = maxVal;
-  }
-
-  document.getElementById('ageMinValue').textContent = '最小 ' + minSlider.value + ' 岁';
-  document.getElementById('ageMaxValue').textContent = '最大 ' + maxSlider.value + ' 岁';
+  const minS = document.getElementById('ageMin');
+  const maxS = document.getElementById('ageMax');
+  let minVal = +minS.value, maxVal = +maxS.value;
+  if (minVal > maxVal) { minS.value = maxVal; minVal = maxVal; }
+  setSliderBg(minS, calcPercent(minVal, 16, 30));
+  setSliderBg(maxS, calcPercent(maxVal, 16, 30));
+  document.getElementById('ageMinValue').textContent = '最小 ' + minVal + ' 岁';
+  document.getElementById('ageMaxValue').textContent = '最大 ' + maxVal + ' 岁';
 }
 
-// 我的身高
 function updateMyHeightDisplay() {
-  const slider = document.getElementById('myHeight');
-  document.getElementById('myHeightValue').textContent = slider.value + ' cm';
-}
-
-function updateHeightDisplay() {
-  const minSlider = document.getElementById('heightMin');
-  const maxSlider = document.getElementById('heightMax');
-  const minVal = parseInt(minSlider.value);
-  const maxVal = parseInt(maxSlider.value);
-
-  if (minVal > maxVal) {
-    minSlider.value = maxVal;
-  }
-
-  document.getElementById('heightMinValue').textContent = '最低 ' + minSlider.value + ' cm';
-  document.getElementById('heightMaxValue').textContent = '最高 ' + maxSlider.value + ' cm';
+  const s = document.getElementById('myHeight');
+  setSliderBg(s, calcPercent(+s.value, 140, 210)); 
+  document.getElementById('myHeightValue').textContent = s.value + ' cm';
 }
 
 function updatePreferredHeightDisplay() {
@@ -1627,9 +1592,13 @@ function updatePreferredHeightDisplay() {
     minSlider.value = maxVal;
   }
 
+  setSliderBg(minSlider, calcPercent(minSlider.value, 140, 210));
+  setSliderBg(maxSlider, calcPercent(maxSlider.value, 140, 210));
+
   document.getElementById('preferredHeightMinValue').textContent = '最低 ' + minSlider.value + ' cm';
   document.getElementById('preferredHeightMaxValue').textContent = '最高 ' + maxSlider.value + ' cm';
 }
+
 function updateTagCounter(name, counterId, max = 5) {
   const checkboxes = document.querySelectorAll(`input[name="${name}"]`);
   const checked = document.querySelectorAll(`input[name="${name}"]:checked`);
