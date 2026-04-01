@@ -37,3 +37,30 @@
     </div>
   </div>
 </nav>
+
+<script>
+(function() {
+  if (window.__dropdownInitialized) return;
+  window.__dropdownInitialized = true;
+
+  document.addEventListener('click', function(e) {
+    var toggle = e.target.closest('.dropdown-toggle');
+    if (toggle) {
+      e.preventDefault();
+      e.stopPropagation();
+      var dropdown = toggle.closest('.dropdown');
+      var menu = dropdown ? dropdown.querySelector('.dropdown-menu') : null;
+      if (menu) {
+        document.querySelectorAll('.dropdown-menu.show').forEach(function(m) {
+          if (m !== menu) m.classList.remove('show');
+        });
+        menu.classList.toggle('show');
+      }
+    } else if (!e.target.closest('.dropdown-menu')) {
+      document.querySelectorAll('.dropdown-menu.show').forEach(function(menu) {
+        menu.classList.remove('show');
+      });
+    }
+  });
+})();
+</script>
